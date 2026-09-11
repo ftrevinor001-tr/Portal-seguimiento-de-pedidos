@@ -84,7 +84,7 @@
   const ART_MAP = {
     clave: ['CLAVE', 'IDARTICULO', 'ID ARTICULO', 'CODIGO'], descripcion: ['DESCRIPCION'], marca: ['MARCA'], grupo: ['GRUPO'],
     estatus_vta: ['ESTATUS_VTA', 'ESTATUS VTA'], estatus_compra: ['ESTATUS_COMPRA', 'ESTATUS COMPRA'], unidad: ['UNIDAD', 'UNIDAD_BV'],
-    existencia: ['EXISTENCIA', 'EXIUNIBAS'], costo: ['COSTO', 'COSTOUC_BM'],
+    existencia: ['EXISTENCIA', 'EXIUNIBAS'], costo: ['COSTO', 'COSTOUC_BM'], comprador: ['COMPRADOR'],
   };
   async function cargaArticulos(file) {
     const ld = UI.loading('Leyendo maestro de artículos… (puede tardar con archivos grandes)');
@@ -96,20 +96,28 @@
         const rows = await wb.rows(sh);
         const hdr = (rows[0] || []).map((h) => U.norm(h));
         const idx = {}; for (const [k, names] of Object.entries(ART_MAP)) { const i = hdr.findIndex((h) => names.includes(h)); if (i >= 0) idx[k] = i; }
-        if (idx.clave !== undefined && idx.existencia !== undefined) { best = { sh, rows, idx }; break; }
+        if (idx.clave !== undefined && (idx.existencia !== undefined || idx.comprador !== undefined)) { best = { sh, rows, idx }; break; }
       }
-      if (!best) { UI.toast('No encontré columnas CLAVE/IDARTICULO y EXISTENCIA/EXIUNIBAS en ninguna hoja', 'error'); return; }
+      if (!best) { UI.toast('No encontré columnas CLAVE/IDARTICULO y EXISTENCIA/EXIUNIBAS o COMPRADOR en ninguna hoja', 'error'); return; }
       const out = new Map();
       for (let i = 1; i < best.rows.length; i++) {
         const r = best.rows[i]; if (!r || r[best.idx.clave] === null || r[best.idx.clave] === undefined) continue;
         const o = {}; for (const [k, j] of Object.entries(best.idx)) o[k] = r[j] === undefined ? null : r[j];
         const t = tipar('sp_articulos', o);
         if (typeof o.clave === 'number') t.clave = String(Math.round(o.clave));
-        if (t.clave) out.set(t.clave, t);
+        if ('comprador' in best.idx) t.comprador = (o.comprador === null || o.comprador === 0 || /^0(\.0+)?$/.test(String(o.comprador).trim())) ? null : U.norm(o.comprador) || null;
+        if (!t.clave) continue;
+        const prev = out.get(t.clave);
+        if (prev && 'comprador' in t) {
+          // Una clave puede venir repetida con distinto comprador: se guardan todos ("A | B")
+          const set = U.uniq([...C.compradoresDeClave(prev.comprador), ...C.compradoresDeClave(t.comprador)]);
+          t.comprador = set.length ? set.join(' | ') : null;
+        }
+        out.set(t.clave, prev ? { ...prev, ...Object.fromEntries(Object.entries(t).filter(([k, v]) => v !== null || k === 'comprador')) } : t);
       }
       const rows = [...out.values()];
       UI.loading(false);
-      if (!(await UI.confirm(`Hoja “${best.sh}”: ${U.fmtNum(rows.length)} artículos. Se actualizarán existencias y descripciones por clave. ¿Continuar?`))) return;
+      if (!(await UI.confirm(`Hoja “${best.sh}”: ${U.fmtNum(rows.length)} artículos. Se actualizarán por clave los datos que traiga el archivo${'comprador' in best.idx ? ' (incluye COMPRADOR)' : ''}. ¿Continuar?`))) return;
       if (!S.user) { APP.pickUser(true); return; }
       const ld2 = UI.loading('Actualizando artículos…');
       const stamp = new Date().toISOString();
@@ -169,7 +177,7 @@
             <p class="muted">Excel con los tres módulos (incluye campos calculados y dados de baja) y los catálogos.</p>
             <button class="btn btn-primary" id="btnBase">⭳ Descargar base completa (Excel)</button></section>
           <section class="card"><div class="card-head"><h2>Actualizar maestro de artículos</h2></div>
-            <p class="muted">Sube la exportación del sistema (hoja con <b>IDARTICULO</b> y <b>EXIUNIBAS</b>, como la pestaña “E”) o un CSV con CLAVE, DESCRIPCION, MARCA, UNIDAD, EXISTENCIA, COSTO. Actualiza existencias por clave.</p>
+            <p class="muted">Sube la exportación del sistema (hoja con <b>IDARTICULO</b> y <b>EXIUNIBAS</b>, como la pestaña “E”) o un archivo con CLAVE y COMPRADOR (asignación de compradores). También acepta CSV con CLAVE, DESCRIPCION, MARCA, UNIDAD, EXISTENCIA, COSTO, COMPRADOR. Actualiza por clave solo las columnas que traiga.</p>
             <input type="file" id="fileArt" accept=".xlsx,.csv"><div id="lastArt" class="muted small"></div></section>
           <section class="card"><div class="card-head"><h2>Carga inicial</h2></div>
             <p class="muted">Solo la primera vez: sube <b>carga_inicial.xlsx</b> (datos ya limpios del Google Sheet). Puedes elegir qué hojas subir.</p>
