@@ -74,6 +74,27 @@ const eq = (name, got, exp) => { checks++; const ok = JSON.stringify(got) === JS
   eq('política', C.cumplePolitica({ validacion_clasificacion: 'SOBREPEDIDO - VENTA REAL', cuenta_cotizacion: 'SI', factura_emitida_cliente: 'SI', pct_pagado: 0.7, costo_total: 250000 }), 'CUMPLE');
   eq('política pend', C.cumplePolitica({ validacion_clasificacion: 'SOBREPEDIDO - VENTA REAL', cuenta_cotizacion: 'SI', factura_emitida_cliente: 'SI', pct_pagado: 0.7, costo_total: 150000 }), 'PENDIENTE');
 
+  // 5) Status vs fecha real de llegada
+  eq('fecha real -> FINALIZADO', C.ajustarStatusPorLlegada({ modulo: 'SOBREPEDIDO', status_pedido: 'PENDIENTE' }, { fecha_real_llegada: '2026-09-10' }).status_pedido, 'FINALIZADO');
+  eq('fecha real -> ENTREGADO', C.ajustarStatusPorLlegada({ modulo: 'ENTREGA_DIRECTA', status_pedido: 'PENDIENTE' }, { fecha_real_llegada: '2026-09-10' }).status_pedido, 'ENTREGADO');
+  eq('borrar fecha -> PENDIENTE', C.ajustarStatusPorLlegada({ modulo: 'SOBREPEDIDO', status_pedido: 'FINALIZADO' }, { fecha_real_llegada: null }).status_pedido, 'PENDIENTE');
+  eq('cancelado no cambia', C.ajustarStatusPorLlegada({ modulo: 'SOBREPEDIDO', status_pedido: 'CANCELADO' }, { fecha_real_llegada: null }).status_pedido, undefined);
+  eq('status manual se respeta', C.ajustarStatusPorLlegada({ modulo: 'SOBREPEDIDO', status_pedido: 'FINALIZADO' }, { fecha_real_llegada: null, status_pedido: 'CANCELADO' }).status_pedido, 'CANCELADO');
+  eq('inconsistencia', C.inconsistencia({ status_pedido: 'FINALIZADO', fecha_real_llegada: null }), 'STATUS_SIN_FECHA');
+
+  // 6) Comprador por clave
+  eq('compradores de clave', C.compradoresDeClave('IVAN | myriam vida christell'), ['IVAN', 'MYRIAM VIDA CHRISTELL']);
+  const ls = [{ clave: '26319', compradores: ['ARICELIA'], comprador: 'ARICELIA' }, { clave: '52461', compradores: ['ARICELIA'], comprador: 'SILVINO' }, { clave: 'NUEVO', compradores: [], comprador: '' }];
+  eq('manual: todas con el general', ls.map((l) => C.compradorDeLinea(l, 'MANUAL', 'lucia')), ['LUCIA', 'LUCIA', 'LUCIA']);
+  eq('claves: cada una la suya y general en vacías', ls.map((l) => C.compradorDeLinea(l, 'CLAVES', 'lucia')), ['ARICELIA', 'SILVINO', 'LUCIA']);
+  const rsm = C.resumenCompradores(ls, 'CLAVES', '');
+  eq('resumen compradores', rsm.compradores, [{ comprador: 'ARICELIA', claves: 1 }, { comprador: 'SILVINO', claves: 1 }]);
+  eq('resumen sin comprador', rsm.sinComprador, ['NUEVO']);
+  eq('distinto al maestro (solo aviso)', rsm.difiereMaestro.map((d) => d.clave), ['52461']);
+  eq('manual distinto al maestro', C.resumenCompradores(ls, 'MANUAL', 'LUCIA').difiereMaestro.length, 2);
+  eq('manual sin comprador', C.resumenCompradores(ls, 'MANUAL', '').sinComprador.length, 3);
+  eq('clave con dos compradores', C.resumenCompradores([{ clave: '45852', compradores: ['IVAN', 'MYRIAM VIDA CHRISTELL'], comprador: 'MYRIAM VIDA CHRISTELL' }], 'CLAVES', '').difiereMaestro.length, 0);
+
   console.log(`\n${checks - fails} de ${checks} verificaciones OK`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });
