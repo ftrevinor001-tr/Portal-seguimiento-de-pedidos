@@ -229,8 +229,12 @@ create table if not exists sp_articulos (
   unidad           text,
   existencia       numeric,        -- EXIUNIBAS
   costo            numeric,        -- COSTOUC_BM
+  comprador        text,           -- comprador asignado a la clave (si hay varios: "A | B")
   actualizado_en   timestamptz not null default now()
 );
+
+-- Por si la tabla ya existía de una versión anterior (v1.0.2)
+alter table sp_articulos add column if not exists comprador text;
 
 create table if not exists sp_cargas (
   id               bigint generated always as identity primary key,
