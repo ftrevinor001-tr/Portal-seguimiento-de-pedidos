@@ -71,6 +71,26 @@
     return '';
   };
 
+  /** Compradores asignados a una clave en el maestro ("A | B" -> ['A','B']) */
+  C.compradoresDeClave = (txt) => U.blank(txt) ? [] : U.uniq(String(txt).split('|').map((x) => up(x)));
+  /**
+   * v1.0.3 — Asignación NO restrictiva del comprador en "Nuevo pedido".
+   * modo MANUAL: todas las claves con el comprador general.
+   * modo CLAVES: cada clave con su comprador (sugerido del maestro y editable); si está vacío, el general.
+   */
+  C.MODOS_COMPRADOR = ['CLAVES', 'MANUAL'];
+  C.compradorDeLinea = (l, modo, general) => (modo === 'MANUAL' ? up(general) : (up(l.comprador) || up(general))) || '';
+  C.resumenCompradores = function (lineas, modo, general) {
+    const conteo = new Map(), sinComprador = [], difiereMaestro = [];
+    for (const l of lineas) {
+      const c = C.compradorDeLinea(l, modo, general);
+      if (!c) { sinComprador.push(l.clave || '(sin clave)'); continue; }
+      conteo.set(c, (conteo.get(c) || 0) + 1);
+      if (l.compradores && l.compradores.length && !l.compradores.includes(c)) difiereMaestro.push({ clave: l.clave, maestro: l.compradores, asignado: c });
+    }
+    return { compradores: [...conteo.entries()].map(([comprador, claves]) => ({ comprador, claves })), sinComprador, difiereMaestro };
+  };
+
   /** ALERTA — réplica de la fórmula matricial del Excel (validada 100%) */
   C.alerta = function (p, hoy) {
     const est = U.iso(p.fecha_estimada), real = U.iso(p.fecha_real_llegada);
