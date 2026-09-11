@@ -17,6 +17,17 @@ Todos los campos calculados se obtienen **al momento**, con la fecha de hoy, en 
 | **% pago mínimo** | Costo total > $200,000 → 70%; si no → 100%. |
 | **Cumple política** | Solo para "SOBREPEDIDO - VENTA REAL": cotización = SI, factura al cliente = SI y % pagado ≥ mínimo → `CUMPLE`; si falta algo → `PENDIENTE`. Para otras clasificaciones → `NO APLICA`. |
 
+## Status del pedido vs. fecha real de llegada
+- **STATUS DEL PEDIDO** (PENDIENTE / FINALIZADO / ENTREGADO / CANCELADO) es un campo **capturado**.
+- **ALERTA**, **días de incumplimiento** y los reportes de cumplimiento se calculan con la **FECHA REAL DE LLEGADA**:
+  - con fecha real, la clave ya llegó;
+  - sin fecha real, sigue pendiente.
+- **Sincronización automática** (en el detalle y en "Editar seleccionados"):
+  - Si se captura fecha real y el status es PENDIENTE, cambia a FINALIZADO (Sobrepedido) o ENTREGADO (Entregas directas / Tickets).
+  - Si se **borra** la fecha real y el status es FINALIZADO o ENTREGADO, regresa a PENDIENTE.
+  - Si en el mismo cambio se elige el status a mano, se respeta lo elegido. CANCELADO nunca se modifica solo.
+- **Filtro "Revisión"** en Seguimiento: encuentra claves "finalizado/entregado sin fecha real" y "pendiente con fecha real" para corregirlas.
+
 ## Fecha estimada (al capturar o editar)
 - **Días**: se toman del catálogo *Tiempos de entrega* (proveedor + solicitante) o del texto "DE 10 A 15 DIAS".
 - **Entrega directa y tickets**:
