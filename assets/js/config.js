@@ -7,7 +7,7 @@ window.SP_CONFIG = {
   SUPABASE_URL: 'https://rbakkrzxdjkpbmbcurng.supabase.co',
   // Pega aquí la llave pública: "anon public" (empieza con eyJ...) o "publishable" (empieza con sb_publishable_...).
   // NUNCA pegues la llave "service_role" / "secret".
-  SUPABASE_KEY:eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amJ1aHR0ZGlrZmhtdWZ1bnJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2Njg3NzAsImV4cCI6MjEwMDI0NDc3MH0.NsQjPUE2l3f1AaBFejg_kTOym_Y04tIjaBQHk_DK62E,
+  SUPABASE_KEY:'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx5amJ1aHR0ZGlrZmhtdWZ1bnJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2Njg3NzAsImV4cCI6MjEwMDI0NDc3MH0.NsQjPUE2l3f1AaBFejg_kTOym_Y04tIjaBQHk_DK62E',
 
   EMPRESA: 'GRUPO SANVER',
   TITULO: 'Portal de Seguimiento de Pedidos',
