@@ -48,6 +48,29 @@
     };
   };
 
+  /** Status que corresponde a "ya llegó" según el módulo */
+  C.statusLlegada = (modulo) => modulo === 'SOBREPEDIDO' ? 'FINALIZADO' : 'ENTREGADO';
+  /**
+   * Mantiene STATUS DEL PEDIDO alineado con FECHA REAL DE LLEGADA cuando el usuario solo cambia la fecha:
+   * - se captura fecha real y el status es PENDIENTE  -> FINALIZADO / ENTREGADO
+   * - se borra la fecha real y el status es FINALIZADO / ENTREGADO -> PENDIENTE
+   * Si el usuario también cambia el status a mano, se respeta lo que eligió. CANCELADO nunca se toca.
+   */
+  C.ajustarStatusPorLlegada = function (prev, patch) {
+    if (!prev || !('fecha_real_llegada' in patch) || 'status_pedido' in patch) return patch;
+    const st = up(prev.status_pedido);
+    if (patch.fecha_real_llegada && st === 'PENDIENTE') return { ...patch, status_pedido: C.statusLlegada(prev.modulo) };
+    if (!patch.fecha_real_llegada && (st === 'FINALIZADO' || st === 'ENTREGADO')) return { ...patch, status_pedido: 'PENDIENTE' };
+    return patch;
+  };
+  /** Revisión de consistencia entre status y fecha real */
+  C.inconsistencia = function (p) {
+    const st = up(p.status_pedido), real = U.iso(p.fecha_real_llegada);
+    if (!real && (st === 'FINALIZADO' || st === 'ENTREGADO')) return 'STATUS_SIN_FECHA';
+    if (real && st === 'PENDIENTE') return 'PENDIENTE_CON_FECHA';
+    return '';
+  };
+
   /** ALERTA — réplica de la fórmula matricial del Excel (validada 100%) */
   C.alerta = function (p, hoy) {
     const est = U.iso(p.fecha_estimada), real = U.iso(p.fecha_real_llegada);

@@ -181,10 +181,11 @@
   /** Actualiza campos de un pedido (solo manda lo que cambió) */
   S.updatePedido = async function (id, patch) {
     requireUser();
+    const prev = S.byId(id);
+    patch = C.ajustarStatusPorLlegada(prev, patch);
     const clean = {};
     for (const [k, v] of Object.entries(patch)) if (TABLE_COLS.has(k)) clean[k] = v;
     clean.actualizado_por = S.user;
-    const prev = S.byId(id);
     const row = await API.updateById('sp_pedidos', id, clean);
     if (!row) throw new Error('No se encontró el registro (¿fue modificado por otra persona?). Actualiza la página.');
     const exi = ('clave' in clean && prev && clean.clave !== prev.clave) ? await existenciaDe(clean.clave) : (prev ? prev.existencia : null);
@@ -195,11 +196,20 @@
   /** Actualiza varios pedidos con el mismo cambio */
   S.updateMany = async function (ids, patch) {
     requireUser();
-    const clean = { ...patch, actualizado_por: S.user };
     const prevs = new Map(ids.map((id) => [id, S.byId(id)]));
-    for (const part of U.chunk(ids, 200)) {
-      const rows = await API.update('sp_pedidos', [['id', 'in', part]], clean);
-      rows.forEach((r) => replaceLocal(r, prevs.get(r.id) ? prevs.get(r.id).existencia : null));
+    // El status puede quedar distinto por clave (según su status actual): se agrupan los cambios iguales
+    const grupos = new Map();
+    for (const id of ids) {
+      const clean = { ...C.ajustarStatusPorLlegada(prevs.get(id), patch), actualizado_por: S.user };
+      const key = JSON.stringify(clean);
+      if (!grupos.has(key)) grupos.set(key, { clean, ids: [] });
+      grupos.get(key).ids.push(id);
+    }
+    for (const g of grupos.values()) {
+      for (const part of U.chunk(g.ids, 200)) {
+        const rows = await API.update('sp_pedidos', [['id', 'in', part]], g.clean);
+        rows.forEach((r) => replaceLocal(r, prevs.get(r.id) ? prevs.get(r.id).existencia : null));
+      }
     }
     S.emit('data');
   };
