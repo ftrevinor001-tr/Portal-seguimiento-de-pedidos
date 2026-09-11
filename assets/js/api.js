@@ -58,6 +58,8 @@
   function parseCount(cr) { if (!cr) return null; const m = cr.match(/\/(\d+|\*)$/); return m && m[1] !== '*' ? +m[1] : null; }
   function traducir(msg, data) {
     if (/relation .* does not exist|Could not find the table/i.test(msg)) return 'Las tablas no existen en Supabase. Ejecuta supabase/schema.sql en el SQL Editor.';
+    const col = msg.match(/Could not find the '([^']+)' column of '([^']+)'/i);
+    if (col) return `Falta la columna “${col[1]}” en la tabla ${col[2]} de Supabase. Ejecuta supabase/schema.sql (o el SQL de la actualización) en el SQL Editor y vuelve a intentar.`;
     if (/Invalid API key|No API key|JWT/i.test(msg)) return 'La llave de Supabase en config.js no es válida.';
     if (/duplicate key/i.test(msg)) return 'Ya existe un registro con esos mismos datos (valor duplicado).';
     if (/permission denied/i.test(msg)) return 'Permiso denegado por la base de datos: ' + msg;

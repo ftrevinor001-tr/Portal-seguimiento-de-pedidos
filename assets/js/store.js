@@ -156,7 +156,15 @@
   S.articulos = async function (claves) {
     const need = U.uniq(claves.map((c) => String(c).trim())).filter((c) => !artCache.has(c));
     for (const part of U.chunk(need, 150)) {
-      const rows = await API.select('sp_articulos', { select: 'clave,descripcion,marca,unidad,existencia,costo,estatus_compra', filters: [['clave', 'in', part]] });
+      let rows;
+      try {
+        rows = await API.select('sp_articulos', { select: `clave,descripcion,marca,unidad,existencia,costo,estatus_compra${S.artSinComprador ? '' : ',comprador'}`, filters: [['clave', 'in', part]] });
+      } catch (e) {
+        // Base sin la columna comprador (falta ejecutar el SQL de la versión 1.0.2): se sigue sin validar comprador
+        if (S.artSinComprador || !/comprador/i.test(e.message)) throw e;
+        S.artSinComprador = true;
+        rows = await API.select('sp_articulos', { select: 'clave,descripcion,marca,unidad,existencia,costo,estatus_compra', filters: [['clave', 'in', part]] });
+      }
       part.forEach((c) => artCache.set(c, null));
       rows.forEach((r) => artCache.set(r.clave, r));
     }
