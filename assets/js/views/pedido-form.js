@@ -17,7 +17,7 @@
         <div class="grid-fields">
           <div class="fld"><label for="pf_fecha">Fecha de solicitud *</label><input type="date" id="pf_fecha" name="fecha" value="${hoy}" required><small>Se guarda con la hora actual y genera AÑO y MES.</small></div>
           <div class="fld"><label>Asignación del comprador *</label><div class="seg seg-sm" id="pf_compModo" role="group" aria-label="Asignación del comprador"><button type="button" data-m="CLAVES">Según las claves</button><button type="button" data-m="MANUAL">Manual</button></div><small id="pf_compModoHint"></small></div>
-          <div class="fld"><label for="pf_comprador" id="pf_compLbl">Comprador *</label><input id="pf_comprador" name="comprador" list="dl_COMPRADOR"><small id="pf_compHint"></small></div>
+          <div class="fld"><label for="pf_comprador" id="pf_compLbl">Comprador asignado *</label><input id="pf_comprador" name="comprador" list="dl_COMPRADOR"><small id="pf_compHint"></small></div>
           <div class="fld"><label for="pf_solicitante">Solicitante *</label><input id="pf_solicitante" name="solicitante" list="dl_SOLICITANTE" placeholder="Ej. BODEGA" required></div>
           <div class="fld"><label for="pf_area">Área *</label><input id="pf_area" name="area" list="dl_AREA" placeholder="Ej. CALL CENTER" required></div>
           <div class="fld"><label for="pf_proveedor">Proveedor <span class="req-ed">*</span></label><input id="pf_proveedor" name="proveedor" list="dl_PROVEEDOR" placeholder="Ej. CEMIX MEXICO SA DE CV"></div>
@@ -114,7 +114,7 @@
       if (maestro.length > 1) ref = `Maestro: ${maestro.join(' / ')}`;
       else if (maestro.length && actual && actual !== maestro[0]) ref = `Maestro: ${maestro[0]}`;
       else if (!maestro.length && l.clave && l.clave !== 'NUEVO') ref = 'Sin comprador en el maestro';
-      return `<input class="in-comp" list="dl_COMPRADOR" value="${U.esc(l.comprador || '')}" placeholder="${U.esc(U.norm($('#pf_comprador').value) || 'Comprador')}">${ref ? `<small class="ref">${U.esc(ref)}</small>` : ''}`;
+      return `<input class="in-comp" list="dl_COMPRADOR" value="${U.esc(l.comprador || '')}" placeholder="${U.esc(compradorComun() || 'Comprador')}">${ref ? `<small class="ref">${U.esc(ref)}</small>` : ''}`;
     }
     function drawLines() {
       const mod = modulo(), ticket = mod === 'TICKET';
@@ -153,36 +153,53 @@
       resumenComprador();
     }
 
-    /** Modo de asignación: textos del campo general */
+    /** Comprador que comparten las claves (modo Según las claves). '' si no hay o si son varios. */
+    function compradoresDeLineas() { return U.uniq(st.lineas.filter((l) => l.clave || l.descripcion).map((l) => U.norm(l.comprador)).filter(Boolean)); }
+    function compradorComun() { const c = compradoresDeLineas(); return c.length === 1 ? c[0] : ''; }
+    /** Comprador general con el que se completan las claves: el escrito (Manual) o el común de las claves */
+    function compradorGeneral() { return st.compModo === 'MANUAL' ? $('#pf_comprador').value : compradorComun(); }
+
+    /** Modo de asignación: textos y comportamiento del campo "Comprador asignado" */
     function aplicarModo() {
       U.$$('#pf_compModo button', m.el).forEach((b) => b.classList.toggle('on', b.dataset.m === st.compModo));
       const inp = $('#pf_comprador');
+      $('#pf_compLbl').textContent = 'Comprador asignado *';
       if (st.compModo === 'MANUAL') {
-        $('#pf_compLbl').textContent = 'Comprador *';
+        inp.readOnly = false;
         inp.placeholder = 'Ej. ARICELIA';
         $('#pf_compHint').textContent = 'Se guarda en todas las claves del pedido.';
-        $('#pf_compModoHint').textContent = 'Tú eliges el comprador; no depende de las claves.';
+        $('#pf_compModoHint').textContent = 'Tú escribes el comprador; no depende de las claves.';
       } else {
-        $('#pf_compLbl').textContent = 'Comprador por defecto';
-        inp.placeholder = 'Opcional';
-        $('#pf_compHint').textContent = 'Se usa en claves NUEVO, sin comprador o que dejes vacías.';
-        $('#pf_compModoHint').textContent = 'Se sugiere el comprador del maestro en cada clave; puedes cambiarlo.';
+        inp.readOnly = true;
+        inp.placeholder = 'Se asigna con las claves';
+        $('#pf_compHint').textContent = 'Se llena solo con el comprador de las claves. Para escribirlo tú, elige Manual.';
+        $('#pf_compModoHint').textContent = 'Cada clave toma su comprador del maestro; puedes cambiarlo en la tabla.';
+        sincronizarCampo();
       }
+    }
+    /** En modo Según las claves, el campo muestra el comprador de las claves */
+    function sincronizarCampo() {
+      if (st.compModo !== 'CLAVES') return;
+      const c = compradoresDeLineas();
+      $('#pf_comprador').value = c.length === 1 ? c[0] : c.length > 1 ? `VARIOS: ${c.join(', ')}` : '';
+      const ph = c.length === 1 ? c[0] : 'Comprador';
+      U.$$('#pf_lines .in-comp', m.el).forEach((x) => { x.placeholder = ph; });
     }
 
     /** Resumen informativo (no bloquea): con qué comprador se guardará cada clave */
     function resumenComprador() {
+      sincronizarCampo();
       const box = $('#pf_compInfo');
       const lineas = st.lineas.filter((l) => l.clave || l.descripcion);
       if (!lineas.length) { box.innerHTML = ''; return null; }
-      const r = C.resumenCompradores(lineas, st.compModo, $('#pf_comprador').value);
+      const r = C.resumenCompradores(lineas, st.compModo, compradorGeneral());
       const msgs = [];
       if (r.compradores.length) {
         const lista = r.compradores.map((c) => `<b>${U.esc(c.comprador)}</b> (${c.claves} clave${c.claves === 1 ? '' : 's'})`).join(' · ');
         msgs.push(`<div class="info-box">Se guardará con: ${lista}${r.compradores.length > 1 ? ' — cada clave con su comprador.' : ''}</div>`);
       }
       if (r.sinComprador.length) {
-        msgs.push(`<div class="warn-box">${st.compModo === 'MANUAL' ? 'Escribe el comprador del pedido.' : `${r.sinComprador.length} clave(s) sin comprador: ${r.sinComprador.slice(0, 10).map(U.esc).join(', ')}${r.sinComprador.length > 10 ? '…' : ''}. Escríbelo en la clave o en “Comprador por defecto”.`}</div>`);
+        msgs.push(`<div class="warn-box">${st.compModo === 'MANUAL' ? 'Escribe el comprador del pedido.' : `${r.sinComprador.length} clave(s) sin comprador: ${r.sinComprador.slice(0, 10).map(U.esc).join(', ')}${r.sinComprador.length > 10 ? '…' : ''}. Escríbelo en la columna Comprador de la tabla o elige Manual.`}</div>`);
       }
       if (r.difiereMaestro.length) {
         msgs.push(`<div class="muted small">Referencia: ${r.difiereMaestro.length} clave(s) con un comprador distinto al del maestro (${r.difiereMaestro.slice(0, 5).map((d) => `${U.esc(d.clave)} → maestro ${U.esc(d.maestro.join(' / '))}`).join(', ')}${r.difiereMaestro.length > 5 ? '…' : ''}). No impide guardar.</div>`);
@@ -199,7 +216,7 @@
       for (const l of lineas) {
         const a = l.clave && l.clave !== 'NUEVO' ? arts[l.clave] : null;
         l.art = a; l.err = ''; l.compradores = a ? C.compradoresDeClave(a.comprador) : [];
-        const gen = U.norm($('#pf_comprador').value);
+        const gen = st.compModo === 'MANUAL' ? U.norm($('#pf_comprador').value) : '';
         l.comprador = gen && l.compradores.includes(gen) ? gen : (l.compradores[0] || '');
         if (a) { if (modulo() !== 'TICKET' || !l.descripcion) l.descripcion = a.descripcion; l.marca = a.marca; l.unidad = a.unidad; l.existencia = a.existencia; }
         else { l.marca = l.marca || ''; l.existencia = null; if (l.clave && l.clave !== 'NUEVO' && modulo() !== 'TICKET') l.err = 'Clave no encontrada en el maestro de artículos: captura la descripción o usa NUEVO.'; }
@@ -214,20 +231,14 @@
     $('#pf_tpl').onclick = () => XL.download(new Blob([`\uFEFF${PLANTILLA}`], { type: 'text/csv;charset=utf-8' }), 'plantilla_claves.csv');
     $('#pf_addRows').onclick = () => { const n = Math.min(300, Math.max(1, +$('#pf_n').value || 1)); for (let i = 0; i < n; i++) st.lineas.push({ clave: '', descripcion: '', cantidad: '' }); drawLines(); };
     $('#pf_clear').onclick = () => { st.lineas = []; $('#pf_file').value = ''; drawLines(); };
-    $('#pf_comprador').addEventListener('input', () => {
-      const ph = U.norm($('#pf_comprador').value) || 'Comprador';
-      U.$$('#pf_lines .in-comp', m.el).forEach((x) => { x.placeholder = ph; });
-      resumenComprador();
-    });
+    $('#pf_comprador').addEventListener('input', () => { if (st.compModo === 'MANUAL') resumenComprador(); });
     U.$$('#pf_compModo button', m.el).forEach((b) => b.onclick = () => {
       if (st.compModo === b.dataset.m) return;
+      if (st.compModo === 'MANUAL') st.compManual = $('#pf_comprador').value;
       st.compModo = b.dataset.m;
       try { localStorage.setItem(LS_MODO, st.compModo); } catch { /* sin storage */ }
-      if (st.compModo === 'MANUAL' && !$('#pf_comprador').value.trim()) {
-        // Conveniencia: si todas las claves traen el mismo comprador, se propone en el campo manual
-        const r = C.resumenCompradores(st.lineas.filter((l) => l.clave), 'CLAVES', '');
-        if (r.compradores.length === 1 && !r.sinComprador.length) $('#pf_comprador').value = r.compradores[0].comprador;
-      }
+      // Al pasar a Manual se conserva lo que ya se había escrito; si no hay, se propone el comprador común de las claves
+      if (st.compModo === 'MANUAL') $('#pf_comprador').value = st.compManual || compradorComun();
       aplicarModo(); drawLines();
     });
     $('#pf_file').onchange = async (e) => {
@@ -259,7 +270,8 @@
       if (!lineas.length) falt.push('al menos una clave');
       if (lineas.some((l) => !(Number(l.cantidad) > 0))) falt.push('cantidad en todas las claves');
       if (lineas.some((l) => !l.descripcion)) falt.push('descripción en todas las claves');
-      const rc = C.resumenCompradores(lineas, st.compModo, v('#pf_comprador'));
+      const general = compradorGeneral();
+      const rc = C.resumenCompradores(lineas, st.compModo, general);
       if (lineas.length && rc.sinComprador.length) falt.push(st.compModo === 'MANUAL' ? 'comprador' : `comprador en ${rc.sinComprador.length} clave(s)`);
       if (falt.length) {
         UI.toast(`Falta: ${falt.join(', ')}`, 'warn', 6000);
@@ -288,7 +300,7 @@
       const fe = C.fechasEstimadas(baseRow, S.hol);
       baseRow.fecha_estimada_inicio = fe.inicio; baseRow.fecha_estimada = fe.fin;
       const rows = lineas.map((l) => ({
-        ...baseRow, comprador: C.compradorDeLinea(l, st.compModo, v('#pf_comprador')), clave: l.clave || 'NUEVO', descripcion: U.norm(l.descripcion), marca: l.marca || null, unidad: l.unidad || null,
+        ...baseRow, comprador: C.compradorDeLinea(l, st.compModo, general), clave: l.clave || 'NUEVO', descripcion: U.norm(l.descripcion), marca: l.marca || null, unidad: l.unidad || null,
         cantidad_solicitada: Number(l.cantidad), catalogado_nuevo: mod === 'SOBREPEDIDO' ? (l.art ? 'CATALOGADO' : 'NUEVO') : null,
       }));
       const ld = UI.loading('Guardando pedido…');
