@@ -28,16 +28,17 @@ Todos los campos calculados se obtienen **al momento**, con la fecha de hoy, en 
   - Si en el mismo cambio se elige el status a mano, se respeta lo elegido. CANCELADO nunca se modifica solo.
 - **Filtro "Revisión"** en Seguimiento: encuentra claves "finalizado/entregado sin fecha real" y "pendiente con fecha real" para corregirlas.
 
-## Comprador (Nuevo pedido) — v1.0.3
+## Comprador (Nuevo pedido) — v1.0.5
 El comprador **no está amarrado a la clave**. En *Datos generales → Asignación del comprador* hay dos opciones (la app recuerda la última que usaste):
 
 - **Según las claves** (sugerido):
-  - Cada clave muestra un campo *Comprador* prellenado con el comprador del maestro de artículos (`sp_articulos.comprador`). Se puede cambiar libremente.
+  - Cada clave toma el comprador del maestro de artículos (`sp_articulos.comprador`) en la columna *Comprador* de la tabla, donde se puede cambiar libremente.
+  - El campo **Comprador asignado** se llena solo (no se escribe): muestra el comprador de las claves o "VARIOS: A, B" si son de compradores distintos.
+  - Claves NUEVO o sin comprador en el maestro toman el comprador de las demás claves cuando todas comparten uno; si hay varios, se escribe en la tabla.
   - Si la clave tiene dos compradores en el maestro ("A | B") se propone el primero y se muestra "Maestro: A / B" como referencia.
-  - **Comprador por defecto**: se usa en claves NUEVO, claves sin comprador en el maestro o que se dejen vacías.
   - Un mismo folio puede quedar con claves de varios compradores; cada clave se guarda con el suyo.
 - **Manual**:
-  - Se escribe un solo comprador y se guarda en **todas** las claves del pedido.
+  - Se escribe el **Comprador asignado** y se guarda en **todas** las claves del pedido. Al cambiar a Manual se propone el comprador de las claves (se puede borrar o cambiar).
   - La columna "Comprador en maestro" es solo de referencia.
 - **Qué se exige**: únicamente que cada clave termine con algún comprador. No hay bloqueo por diferencias con el maestro: solo se muestra una nota de referencia.
 - **Registros anteriores**: el comprador guardado en cada pedido **no cambia** al actualizar el maestro de artículos (esa carga solo modifica `sp_articulos`). Si alguien cambió de cartera o dejó la empresa, los pedidos históricos conservan a quien los compró. Solo cambia si alguien lo edita a mano en el detalle o en "Editar seleccionados".
