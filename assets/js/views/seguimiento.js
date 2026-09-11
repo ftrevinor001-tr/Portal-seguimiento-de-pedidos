@@ -1,6 +1,6 @@
 /* Vista: Seguimiento (tabla principal con filtros, KPIs, edición masiva y descarga) */
 (function () {
-  const st = { modulo: '', anio: '', mes: '', tipo_solicitud: '', comprador: '', area: '', solicitante: '', status: '', alerta: '', q: '', bajas: false };
+  const st = { modulo: '', anio: '', mes: '', anio_est: '', mes_est: '', tipo_solicitud: '', comprador: '', area: '', solicitante: '', status: '', alerta: '', revision: '', q: '', bajas: false };
   let table = null, root = null;
 
   /** Columnas para exportar a Excel (campos + calculados) */
@@ -31,6 +31,8 @@
     return base().filter((p) => {
       if (st.modulo && p.modulo !== st.modulo) return false;
       if (st.anio || st.mes) { const m = C.mesSolicitud(p); if (!m) return false; if (st.anio && m.anio !== +st.anio) return false; if (st.mes && m.mes !== +st.mes) return false; }
+      if (st.anio_est || st.mes_est) { const d = U.iso(p.fecha_estimada); if (!d) return false; if (st.anio_est && +d.slice(0, 4) !== +st.anio_est) return false; if (st.mes_est && +d.slice(5, 7) !== +st.mes_est) return false; }
+      if (st.revision && C.inconsistencia(p) !== st.revision) return false;
       if (st.tipo_solicitud && p.tipo_solicitud !== st.tipo_solicitud) return false;
       if (st.comprador && p.comprador !== st.comprador) return false;
       if (st.area && p.area !== st.area) return false;
@@ -87,13 +89,16 @@
     APP.filterBar(U.$('#segFilters', root), [
       { k: 'modulo', label: 'Módulo', options: APP.moduloOpts },
       { k: 'anio', label: 'Año (solicitud)', options: APP.anios },
-      { k: 'mes', label: 'Mes', options: APP.mesesOpts },
+      { k: 'mes', label: 'Mes (solicitud)', options: APP.mesesOpts },
+      { k: 'anio_est', label: 'Año (f. estimada)', options: () => U.uniq(base().map((p) => U.iso(p.fecha_estimada) ? +U.iso(p.fecha_estimada).slice(0, 4) : null)).sort((a, b) => b - a) },
+      { k: 'mes_est', label: 'Mes (f. estimada)', options: APP.mesesOpts },
       { k: 'tipo_solicitud', label: 'Tipo de solicitud', options: () => U.sortEs(U.uniq(base().filter((p) => !mod || p.modulo === mod).map((p) => p.tipo_solicitud))) },
       { k: 'comprador', label: 'Comprador', options: () => S.lista('COMPRADOR', mod) },
       { k: 'area', label: 'Área', options: () => S.lista('AREA', mod) },
       { k: 'solicitante', label: 'Solicitante', options: () => S.lista('SOLICITANTE', mod) },
       { k: 'status', label: 'Status', options: () => S.lista('STATUS', mod) },
       { k: 'alerta', label: 'Alerta', options: () => C.ALERTAS },
+      { k: 'revision', label: 'Revisión', options: () => [{ value: 'STATUS_SIN_FECHA', label: 'Finalizado/entregado sin fecha real' }, { value: 'PENDIENTE_CON_FECHA', label: 'Pendiente con fecha real' }], wide: true },
       { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Clave, folio, descripción, OC…' },
     ], st, (k) => { if (k === 'modulo') filtros(); draw(); }, {
       actions: `<button class="btn btn-ghost btn-sm" id="btnClear">Limpiar</button>`,

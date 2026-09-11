@@ -68,9 +68,11 @@
           const ini = form.querySelector('[name="fecha_estimada_inicio"]'); if (ini && fe.inicio) ini.value = fe.inicio;
         }
       }
-      if (k === 'fecha_real_llegada' && e.target.value) {
+      if (k === 'fecha_real_llegada') {
         const s = form.querySelector('[name="status_pedido"]');
-        if (s && U.norm(s.value) === 'PENDIENTE') { s.value = p.modulo === 'SOBREPEDIDO' ? 'FINALIZADO' : 'ENTREGADO'; UI.toast(`Status cambiado a ${s.value} (recuerda guardar)`, 'warn'); }
+        const actual = s ? U.norm(s.value) : '';
+        if (s && e.target.value && actual === 'PENDIENTE') { s.value = C.statusLlegada(p.modulo); UI.toast(`Status cambiado a ${s.value} (recuerda guardar)`, 'warn'); }
+        if (s && !e.target.value && (actual === 'FINALIZADO' || actual === 'ENTREGADO')) { s.value = 'PENDIENTE'; UI.toast('Se borró la fecha real: status regresa a PENDIENTE (recuerda guardar)', 'warn'); }
       }
       markDirty();
     });
