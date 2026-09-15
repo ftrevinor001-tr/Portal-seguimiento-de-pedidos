@@ -56,6 +56,18 @@ create table if not exists sp_pedidos (
   directo_sanver              text,          -- DG | SUCURSAL
   tipo_directo                text,
 
+  -- Etapas del ticket (v1.2.0) — se capturan por folio y aplican a todas sus claves
+  fecha_asignacion            date,          -- el jefe de área asigna comprador
+  asignado_por                text,          -- quién asignó
+  fecha_cotizacion_usuario    date,          -- se da respuesta al usuario con la cotización
+  vigencia_dias               int,           -- vigencia de esa cotización (días naturales)
+  fecha_vence_cotizacion      date,          -- vencimiento de la cotización
+  fecha_recotizacion_usuario  date,          -- respuesta al usuario con la RE-cotización
+  vigencia_dias_2             int,
+  fecha_vence_cotizacion_2    date,
+  fecha_aceptacion_usuario    date,          -- el usuario acepta la cotización
+  nota_etapas                 text,
+
   -- Facturación / entregas parciales
   folio_factura               text,
   fecha_facturacion           date,
@@ -235,6 +247,20 @@ create table if not exists sp_articulos (
 
 -- Por si la tabla ya existía de una versión anterior (v1.0.2)
 alter table sp_articulos add column if not exists comprador text;
+
+-- Etapas del ticket (v1.2.0) en bases que ya existían
+alter table sp_pedidos add column if not exists fecha_asignacion date;
+alter table sp_pedidos add column if not exists asignado_por text;
+alter table sp_pedidos add column if not exists fecha_cotizacion_usuario date;
+alter table sp_pedidos add column if not exists vigencia_dias int;
+alter table sp_pedidos add column if not exists fecha_vence_cotizacion date;
+alter table sp_pedidos add column if not exists fecha_recotizacion_usuario date;
+alter table sp_pedidos add column if not exists vigencia_dias_2 int;
+alter table sp_pedidos add column if not exists fecha_vence_cotizacion_2 date;
+alter table sp_pedidos add column if not exists fecha_aceptacion_usuario date;
+alter table sp_pedidos add column if not exists nota_etapas text;
+create index if not exists sp_pedidos_folio_mod_idx on sp_pedidos (modulo, folio_pedido);
+
 
 create table if not exists sp_cargas (
   id               bigint generated always as identity primary key,
