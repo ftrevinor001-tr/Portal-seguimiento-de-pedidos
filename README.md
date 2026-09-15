@@ -4,6 +4,7 @@ Aplicación web del Área de Compras para dar seguimiento a **sobrepedidos, entr
 
 - **Seguimiento**: tabla con filtros, alertas y KPIs. Permite editar una clave, editar varias a la vez, dar de baja o restaurar, y descargar a Excel.
 - **Nuevo pedido**: captura por folio. El tiempo de entrega y el de descarga se toman de los catálogos. Las claves se capturan a mano o se cargan desde un CSV o Excel.
+- **Tickets**: las cuatro etapas de cada ticket (asignación, cotización, recotización y entrega) con tiempos, metas y etapa actual. Ver [`docs/reglas-de-calculo.md`](docs/reglas-de-calculo.md).
 - **Calendario E. Directas**: folios, proveedores y horas de descarga por día, con nivel de carga y el detalle de cada día.
 - **Compradores**: composición del cumplimiento (dentro del plazo, fuera del plazo y pendientes vencidas) por comprador.
 - **Reporte mensual**: cumplimiento, clasificación de política y facturación/existencias. Se descarga a Excel.
@@ -62,6 +63,7 @@ Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md): se crea un usu
 | Ver qué llega hoy y la carga de descarga | Calendario E. Directas |
 | Actualizar existencias | Datos y bitácora → **Actualizar maestro de artículos** (exportación con IDARTICULO y EXIUNIBAS) |
 | Dar de alta días festivos | Catálogos → **Días inhábiles** |
+| Asignar un ticket, cotizar, recotizar o registrar la aceptación | Tickets → clic en el ticket → sección **Etapas del ticket** |
 | Ver quién cambió qué | Detalle de la clave → **Historial de cambios**, o Datos y bitácora → **Bitácora** |
 | Respaldo / Excel completo | Datos y bitácora → **Descargar base completa** |
 
@@ -75,6 +77,7 @@ Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md): se crea un usu
 |---|---|---|
 | `CAPACIDAD_HORAS_DIA` | 8 | Horas de descarga por día que se consideran carga "Alta" en el calendario |
 | `UMBRAL_CARGA_MEDIA` | 0.5 | Desde 50% de la capacidad (4 h) la carga es "Media"; por debajo es "Baja" |
+| `METAS_TICKET` | 1 / 2 / 2 / 15 días | Metas de las etapas del ticket (asignación, cotización, recotización, entrega), vigencia de la cotización (15 días naturales) y aviso de vencimiento (3 días) |
 | `USUARIO_EDICION` | `captura@portalpedidos.mx` | Correo del usuario de Supabase que se usa al entrar con contraseña |
 | `DIAS_NOTIFICAR` | 5 | La ALERTA pasa a NOTIFICAR cuando faltan menos de 5 días para la fecha estimada |
 | `MONTO_PAGO_PARCIAL` / `PCT_PAGO_PARCIAL` | 200,000 / 0.7 | Pago mínimo del 70% en sobrepedidos mayores a $200,000 |
