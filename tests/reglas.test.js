@@ -95,6 +95,47 @@ const eq = (name, got, exp) => { checks++; const ok = JSON.stringify(got) === JS
   eq('manual sin comprador', C.resumenCompradores(ls, 'MANUAL', '').sinComprador.length, 3);
   eq('clave con dos compradores', C.resumenCompradores([{ clave: '45852', compradores: ['IVAN', 'MYRIAM VIDA CHRISTELL'], comprador: 'MYRIAM VIDA CHRISTELL' }], 'CLAVES', '').difiereMaestro.length, 0);
 
+  // 7) Etapas del ticket (v1.2.0) — días hábiles, vigencia y activación de la recotización
+  const HOL = new Set();
+  const base = { modulo: 'TICKET', status_pedido: 'PENDIENTE', fecha_solicitud: '2026-09-01', fecha_asignacion: '2026-09-02', fecha_cotizacion_usuario: '2026-09-04', vigencia_dias: 15 };
+  const et = (p, hoy) => C.etapasTicket(p, hoy, HOL);
+  let t = et(base, '2026-09-15');
+  eq('etapa 1 asignación (días hábiles)', t.dias.asignacion, 1);
+  eq('etapa 2 cotización', t.dias.cotizacion, 2);
+  eq('vence la cotización', t.vence, '2026-09-19');
+  eq('días para vencer', t.venceEn, 4);
+  eq('etapa actual con cotización vigente', t.actual, 'ESPERA DEL USUARIO');
+  eq('etapa 3 inactiva mientras no venza', t.etapas[2].estado, 'INACTIVA');
+  eq('etapa 4 pendiente', t.etapas[3].estado, 'PENDIENTE');
+  eq('cumple metas 1 y 2', [t.etapas[0].cumple, t.etapas[1].cumple], [true, true]);
+
+  t = et(base, '2026-09-25');
+  eq('venció sin respuesta → por recotizar', t.actual, 'POR RECOTIZAR');
+  eq('etapa 3 se activa al vencer', t.etapas[2].estado, 'EN CURSO');
+  eq('etapa 3 en curso desde el vencimiento', t.dias.recotizacion, 4);
+  eq('etapa 3 fuera de meta', t.etapas[2].cumple, false);
+
+  const conRecot = { ...base, fecha_recotizacion_usuario: '2026-09-23', vigencia_dias_2: 15 };
+  t = et(conRecot, '2026-09-25');
+  eq('etapa 3 medida', t.dias.recotizacion, 2);
+  eq('etapa 3 dentro de meta', t.etapas[2].cumple, true);
+  eq('vence la re-cotización', t.vence2, '2026-10-08');
+  eq('tras recotizar, espera del usuario', t.actual, 'ESPERA DEL USUARIO');
+
+  const aceptado = { ...conRecot, fecha_aceptacion_usuario: '2026-09-24' };
+  eq('aceptada → en surtimiento', et(aceptado, '2026-09-30').actual, 'EN SURTIMIENTO');
+  eq('etapa 3 ya no se activa si el usuario aceptó', et({ ...base, fecha_aceptacion_usuario: '2026-09-10' }, '2026-09-25').etapas[2].estado, 'INACTIVA');
+  const entregado = { ...aceptado, fecha_real_llegada: '2026-10-08', status_pedido: 'ENTREGADO' };
+  t = et(entregado, '2026-10-20');
+  eq('etapa 4 entrega (días hábiles)', t.dias.entrega, 10);
+  eq('etapa 4 dentro de meta 15', t.etapas[3].cumple, true);
+  eq('ticket entregado', t.actual, 'ENTREGADO');
+  eq('total del ticket', t.total, 27);
+  eq('cancelado', et({ ...base, status_pedido: 'CANCELADO' }, '2026-09-25').actual, 'CANCELADO');
+  eq('vencimiento capturado a mano manda', C.venceCotizacion('2026-09-04', 15, '2026-09-10'), '2026-09-10');
+  eq('vigencia por default', C.venceCotizacion('2026-09-04', null, null), '2026-09-19');
+  eq('días inhábiles cuentan', C.etapasTicket(base, '2026-09-15', new Set(['2026-09-02'])).dias.asignacion, 0);
+
   console.log(`\n${checks - fails} de ${checks} verificaciones OK`);
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });
