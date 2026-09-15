@@ -11,9 +11,44 @@
     cargado: false,
   };
 
-  const LS_USER = 'sp_usuario';
+  const LS_USER = 'sp_usuario', LS_SES = 'sp_sesion';
   try { S.user = localStorage.getItem(LS_USER) || null; } catch { S.user = null; }
   S.setUser = (n) => { S.user = U.norm(n) || null; try { localStorage.setItem(LS_USER, S.user || ''); } catch { /* sin storage */ } S.emit('user'); };
+
+  /* ------------------ Sesión de edición (contraseña) ------------------ */
+  const CFG = () => (root.SP_CONFIG || {});
+  S.correoEdicion = () => CFG().USUARIO_EDICION || 'captura@portalpedidos.mx';
+  S.puedeEditar = () => API.conSesion();
+  /** Recupera la sesión guardada (si sigue vigente) al abrir el portal */
+  S.restaurarSesion = async function () {
+    let s = null;
+    try { s = JSON.parse(localStorage.getItem(LS_SES) || 'null'); } catch { s = null; }
+    if (!s || !s.access_token) return false;
+    API.usarSesion(s);
+    const ok = await API.revisarSesion();
+    if (ok) { guardarSesion(); S.emit('sesion'); return true; }
+    S.cerrarSesion(true); return false;
+  };
+  function guardarSesion() { try { localStorage.setItem(LS_SES, JSON.stringify(API.sesion() || null)); } catch { /* sin storage */ } }
+  S.entrar = async function (password, nombre) {
+    await API.login(S.correoEdicion(), password);
+    guardarSesion();
+    if (nombre) S.setUser(nombre);
+    S.emit('sesion');
+  };
+  S.cerrarSesion = function (silencio) {
+    API.cerrarSesion();
+    try { localStorage.removeItem(LS_SES); } catch { /* sin storage */ }
+    if (!silencio) S.emit('sesion');
+  };
+  /** Se llama antes de cualquier escritura: sin sesión no se manda nada a la base */
+  S.exigirSesion = function () { if (!API.conSesion()) throw new Error('Para guardar cambios necesitas entrar con la contraseña (botón “Entrar para editar”).'); };
+  /** La llama api.js cuando el token dejó de servir */
+  S.sesionExpirada = function () {
+    S.cerrarSesion(true);
+    S.emit('sesion');
+    if (root.UI) UI.toast('Tu sesión de edición terminó. Vuelve a entrar con la contraseña para guardar cambios.', 'warn', 8000);
+  };
 
   S.on = (fn) => { S.listeners.add(fn); return () => S.listeners.delete(fn); };
   S.emit = (what) => S.listeners.forEach((fn) => { try { fn(what); } catch (e) { console.error(e); } });
@@ -174,7 +209,7 @@
   S.clearArtCache = () => artCache.clear();
 
   /* ------------------ Guardado ------------------ */
-  function requireUser() { if (!S.user) throw new Error('Selecciona tu nombre antes de guardar (arriba a la derecha).'); }
+  function requireUser() { S.exigirSesion(); if (!S.user) throw new Error('Selecciona tu nombre antes de guardar (arriba a la derecha).'); }
   const TABLE_COLS = new Set([...S.FIELDS.map((f) => f.k), 'modulo', 'activo', 'origen_hoja', 'origen_fila', 'creado_por', 'actualizado_por']);
 
   function replaceLocal(row, prevExistencia) {

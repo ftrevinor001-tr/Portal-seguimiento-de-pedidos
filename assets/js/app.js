@@ -30,15 +30,15 @@
   APP.mesesOpts = () => U.MESES.map((m, i) => ({ value: String(i + 1), label: m.charAt(0) + m.slice(1).toLowerCase() }));
   APP.moduloOpts = () => C.MODULOS;
 
-  /* ---------- Usuario ---------- */
+  /* ---------- Usuario y sesión de edición ---------- */
   APP.pickUser = function (force) {
     if (S.user && !force) return;
     const names = S.usuarios();
     const m = UI.modal({
-      title: '¿Quién eres?', subtitle: 'Tu nombre queda registrado en la bitácora de cada cambio que hagas. No hay contraseña.',
+      title: '¿Quién eres?', subtitle: 'Tu nombre queda registrado en la bitácora de cada cambio que hagas.',
       body: `<div class="fld"><label for="u_sel">Selecciona tu nombre</label><select id="u_sel">${U.options(names, S.user, { empty: '— Selecciona —' })}</select></div>
              <div class="fld"><label for="u_txt">…o escríbelo si no aparece</label><input id="u_txt" type="text" placeholder="Nombre y apellido"></div>`,
-      footer: `<button class="btn btn-ghost" data-a="skip">Solo consultar</button><button class="btn btn-primary" data-a="ok">Continuar</button>`,
+      footer: `<button class="btn btn-ghost" data-a="skip">Cancelar</button><button class="btn btn-primary" data-a="ok">Continuar</button>`,
     });
     U.$('[data-a="skip"]', m.el).onclick = () => m.close();
     U.$('[data-a="ok"]', m.el).onclick = () => {
@@ -46,6 +46,50 @@
       if (!n) { UI.toast('Selecciona o escribe tu nombre', 'warn'); return; }
       S.setUser(n); m.close(); UI.toast(`Hola, ${S.user}`);
     };
+  };
+
+  /** Pantalla para entrar con la contraseña de captura */
+  APP.entrar = function (motivo) {
+    if (S.puedeEditar()) return;
+    const names = S.usuarios();
+    const m = UI.modal({
+      title: 'Entrar para editar',
+      subtitle: motivo || 'Sin contraseña puedes consultar y descargar la información, pero no capturar ni modificar.',
+      body: `<form class="pf" autocomplete="off" id="loginForm">
+        <div class="fld"><label for="lg_pass">Contraseña de captura *</label><input id="lg_pass" type="password" autocomplete="current-password" placeholder="La contraseña del área de compras"></div>
+        <div class="fld"><label for="lg_sel">¿Quién eres? (queda en la bitácora) *</label><select id="lg_sel">${U.options(names, S.user, { empty: '— Selecciona —' })}</select></div>
+        <div class="fld"><label for="lg_txt">…o escribe tu nombre si no aparece</label><input id="lg_txt" type="text" placeholder="Nombre y apellido" value="${U.esc(S.user && !names.includes(S.user) ? S.user : '')}"></div>
+        <div id="lg_err"></div>
+      </form>`,
+      footer: `<button class="btn btn-ghost" data-a="c">Solo consultar</button><button class="btn btn-primary" data-a="ok">Entrar</button>`,
+    });
+    const err = (t) => { U.$('#lg_err', m.el).innerHTML = t ? `<div class="error-box">${U.esc(t)}</div>` : ''; };
+    U.$('[data-a="c"]', m.el).onclick = () => m.close();
+    const enviar = async () => {
+      const pass = U.$('#lg_pass', m.el).value;
+      const nombre = U.$('#lg_txt', m.el).value.trim() || U.$('#lg_sel', m.el).value;
+      if (!pass) { err('Escribe la contraseña.'); return; }
+      if (!nombre) { err('Selecciona o escribe tu nombre.'); return; }
+      const btn = U.$('[data-a="ok"]', m.el); btn.disabled = true; btn.textContent = 'Entrando…';
+      try {
+        await S.entrar(pass, nombre);
+        m.close();
+        UI.toast(`Modo edición activado. Hola, ${S.user}`);
+      } catch (e) { err(e.message); btn.disabled = false; btn.textContent = 'Entrar'; }
+    };
+    U.$('[data-a="ok"]', m.el).onclick = enviar;
+    U.$('#loginForm', m.el).addEventListener('submit', (e) => { e.preventDefault(); enviar(); });
+    setTimeout(() => { const i = U.$('#lg_pass', m.el); if (i) i.focus(); }, 60);
+  };
+  /** Úsalo antes de cualquier acción que escriba en la base */
+  APP.requiereEdicion = function (motivo) {
+    if (!S.puedeEditar()) { APP.entrar(motivo); return false; }
+    if (!S.user) { APP.pickUser(true); return false; }
+    return true;
+  };
+  APP.salir = function () {
+    S.cerrarSesion();
+    UI.toast('Saliste del modo edición: ahora solo puedes consultar.');
   };
 
   /* ---------- Navegación ---------- */
@@ -57,7 +101,7 @@
           <div class="brand"><h1>${U.esc(CFG.TITULO || 'Portal de Seguimiento de Pedidos')}</h1><p>Sobrepedido · Entregas directas · Pedido especial · Tickets — Área de Compras</p></div>
           <div class="top-actions">
             <span class="pill">${U.esc(CFG.EMPRESA || '')}</span>
-            <button class="user-chip" id="userChip" title="Cambiar usuario"><span class="avatar">👤</span><span id="userName">${U.esc(S.user || 'Sin usuario')}</span></button>
+            <span id="sesionBox"></span>
             <button class="btn btn-light btn-sm" id="btnRefresh" title="Volver a cargar datos">⟳ Actualizar</button>
           </div>
         </div>
@@ -65,10 +109,21 @@
       </header>
       <main id="view" tabindex="-1"></main>
       <footer class="foot"><span id="lastLoad"></span><span>Datos en Supabase · Cambios registrados en bitácora</span></footer>`;
-    U.$('#userChip').onclick = () => APP.pickUser(true);
     U.$('#btnRefresh').onclick = () => APP.reload();
-    S.on((w) => { if (w === 'user') U.$('#userName').textContent = S.user || 'Sin usuario'; });
+    pintarSesion();
+    S.on((w) => { if (w === 'user' || w === 'sesion') { pintarSesion(); if (w === 'sesion') APP.go(); } });
   }
+  /** Chip de la esquina: modo edición (con nombre) o solo lectura */
+  function pintarSesion() {
+    const box = U.$('#sesionBox'); if (!box) return;
+    box.innerHTML = S.puedeEditar()
+      ? `<button class="user-chip" id="userChip" title="Cambiar nombre"><span class="avatar">✏️</span><span id="userName">${U.esc(S.user || 'Sin usuario')}</span></button><button class="btn btn-light btn-sm" id="btnSalir" title="Salir del modo edición">Salir</button>`
+      : `<span class="pill pill-ro" title="Cualquiera con el link puede consultar y descargar">🔒 Solo lectura</span><button class="btn btn-light btn-sm" id="btnEntrar">Entrar para editar</button>`;
+    const chip = U.$('#userChip'); if (chip) chip.onclick = () => APP.pickUser(true);
+    const salir = U.$('#btnSalir'); if (salir) salir.onclick = () => APP.salir();
+    const entrar = U.$('#btnEntrar'); if (entrar) entrar.onclick = () => APP.entrar();
+  }
+
   APP.go = function () {
     const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'seguimiento';
     const view = APP.views[name] || APP.views.seguimiento;
@@ -104,11 +159,13 @@
   APP.start = async function () {
     API.init(CFG.SUPABASE_URL, CFG.SUPABASE_KEY);
     if (!API.configurada()) { renderSetup(); return; }
+    await S.restaurarSesion();
     renderShell();
     window.addEventListener('hashchange', APP.go);
     APP.go();
     await APP.reload();
-    if (!S.user) APP.pickUser();
+    // Renueva el token cada 10 minutos mientras el portal esté abierto
+    setInterval(() => { if (S.puedeEditar()) API.revisarSesion().catch(() => {}); }, 600000);
   };
 
   root.APP = APP;

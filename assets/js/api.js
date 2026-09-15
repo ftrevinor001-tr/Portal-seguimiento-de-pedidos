@@ -1,10 +1,13 @@
 /* Cliente mínimo para la API REST de Supabase (PostgREST). Sin librerías externas. */
 (function (root) {
   const API = {};
-  let BASE = '', KEY = '', sendBearer = true;
+  let BASE = '', AUTH = '', KEY = '', sendBearer = true;
+  let TOKEN = null, REFRESH = null, EXP = 0;   // sesión de edición (Supabase Auth)
 
   API.init = function (url, key) {
-    BASE = String(url || '').replace(/\/+$/, '') + '/rest/v1';
+    const raiz = String(url || '').replace(/\/+$/, '');
+    BASE = raiz + '/rest/v1';
+    AUTH = raiz + '/auth/v1';
     KEY = key || '';
     // Llaves nuevas (sb_publishable_...) no son JWT: se mandan solo en "apikey"
     sendBearer = !/^sb_/.test(KEY);
@@ -13,9 +16,41 @@
 
   function headers(extra) {
     const h = { apikey: KEY, 'Content-Type': 'application/json', Accept: 'application/json' };
-    if (sendBearer) h.Authorization = `Bearer ${KEY}`;
+    if (TOKEN) h.Authorization = `Bearer ${TOKEN}`;
+    else if (sendBearer) h.Authorization = `Bearer ${KEY}`;
     return Object.assign(h, extra || {});
   }
+
+  /* ---------- Sesión de edición (Supabase Auth) ---------- */
+  API.conSesion = () => !!TOKEN;
+  API.sesion = () => TOKEN ? { access_token: TOKEN, refresh_token: REFRESH, expira: EXP } : null;
+  API.usarSesion = function (s) {
+    TOKEN = s && s.access_token || null; REFRESH = s && s.refresh_token || null;
+    EXP = s && (s.expira || (s.expires_in ? Date.now() + s.expires_in * 1000 : 0)) || 0;
+    return API.sesion();
+  };
+  API.cerrarSesion = () => { TOKEN = null; REFRESH = null; EXP = 0; };
+  async function auth(path, body) {
+    let res;
+    try {
+      res = await fetch(`${AUTH}/${path}`, { method: 'POST', headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    } catch { throw new Error('No hay conexión con Supabase para validar la contraseña.'); }
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = (data && (data.error_description || data.msg || data.message || data.error)) || `Error ${res.status}`;
+      if (/Invalid login|invalid_grant|Email not confirmed/i.test(msg)) throw new Error('Contraseña incorrecta.');
+      if (/not found|404/i.test(msg)) throw new Error('El usuario de edición no existe en Supabase (Authentication → Users).');
+      throw new Error(msg);
+    }
+    return API.usarSesion(data);
+  }
+  API.login = (email, password) => auth('token?grant_type=password', { email, password });
+  API.refrescar = async function () {
+    if (!REFRESH) return null;
+    try { return await auth('token?grant_type=refresh_token', { refresh_token: REFRESH }); } catch { API.cerrarSesion(); return null; }
+  };
+  /** Renueva el token si le quedan menos de 5 minutos */
+  API.revisarSesion = async function () { if (TOKEN && EXP && EXP - Date.now() < 300000) return API.refrescar(); return API.sesion(); };
 
   const enc = (v) => encodeURIComponent(v);
   function quoteIn(v) { const s = String(v); return /[,()"\s]/.test(s) ? `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"` : s; }
@@ -43,7 +78,10 @@
     } catch (e) {
       throw new Error('No hay conexión con la base de datos (Supabase). Revisa tu internet o la URL en config.js.');
     }
-    if (res.status === 401 && retry) { sendBearer = !sendBearer; return request(method, path, { body, prefer, query }, false); }
+    if (res.status === 401 && retry) {
+      if (TOKEN) { const s = await API.refrescar(); if (!s) { API.cerrarSesion(); if (root.S) S.sesionExpirada(); } return request(method, path, { body, prefer, query }, false); }
+      sendBearer = !sendBearer; return request(method, path, { body, prefer, query }, false);
+    }
     const text = await res.text();
     let data = null;
     try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -62,7 +100,9 @@
     if (col) return `Falta la columna “${col[1]}” en la tabla ${col[2]} de Supabase. Ejecuta supabase/schema.sql (o el SQL de la actualización) en el SQL Editor y vuelve a intentar.`;
     if (/Invalid API key|No API key|JWT/i.test(msg)) return 'La llave de Supabase en config.js no es válida.';
     if (/duplicate key/i.test(msg)) return 'Ya existe un registro con esos mismos datos (valor duplicado).';
-    if (/permission denied/i.test(msg)) return 'Permiso denegado por la base de datos: ' + msg;
+    if (/row-level security|permission denied|42501/i.test(msg)) return TOKEN
+      ? 'Tu sesión ya no tiene permiso para guardar. Vuelve a entrar con la contraseña.'
+      : 'Para guardar cambios necesitas entrar con la contraseña (botón “Entrar para editar”).';
     return msg + (data && data.details ? ` (${data.details})` : '');
   }
 
