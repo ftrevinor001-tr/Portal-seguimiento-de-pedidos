@@ -63,6 +63,8 @@ main { padding: 18px clamp(16px, 3vw, 32px) 30px; max-width: 1680px; margin: 0 a
 .error-card { border-color: #f2b8b8; } .error-card pre { white-space: pre-wrap; font-size: 12px; }
 .setup { max-width: 720px; margin: 60px auto; } .setup h1 { margin-bottom: 10px; color: var(--brand-1); }
 .empty { padding: 24px; text-align: center; color: var(--muted); }
+.error-box { background: var(--critical-bg); border: 1px solid #f2b8b8; padding: 8px 12px; border-radius: 10px; color: #8a1f1f; margin-top: 8px; }
+.ok-box { background: var(--good-bg); border: 1px solid #b8e8b8; padding: 8px 12px; border-radius: 10px; color: #0a5e0a; margin-top: 8px; }
 .warn-box { background: var(--warning-bg); border: 1px solid #f5dc93; padding: 8px 12px; border-radius: 10px; color: #6b4a00; }
 
 /* ---------- Botones ---------- */
@@ -258,3 +260,14 @@ details.grp summary > b { color: var(--brand-1); }
   .modal-body, .drawer-body { padding: 14px; }
 }
 @media print { .top, .foot, .filters, .head-actions, .pager { display: none !important; } body { background: #fff; } .card { box-shadow: none; break-inside: avoid; } }
+
+/* v1.0.3 · Asignación de comprador en Nuevo pedido */
+.info-box { background: var(--info-bg); border: 1px solid #bcd3f2; padding: 8px 12px; border-radius: 10px; color: #17457e; margin-top: 8px; }
+.pf-comp .warn-box { margin-top: 8px; } .pf-comp .muted.small { margin-top: 6px; }
+.seg.seg-sm { margin-bottom: 0; flex-wrap: nowrap; } .seg.seg-sm button { padding: 7px 11px; font-size: 13px; white-space: nowrap; }
+.lines .in-comp { width: 170px; } .lines small.ref { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; white-space: nowrap; }
+
+/* v1.1.0 · Sesión de edición */
+.pill-ro { background: rgba(255, 255, 255, .18); border-color: rgba(255, 255, 255, .5); }
+.det-foot .pill-ro, .card-head .pill-ro { background: var(--warning-bg); border: 1px solid #f5dc93; color: #6b4a00; }
+#loginForm .fld { margin-bottom: 10px; } #loginForm input[type=password] { letter-spacing: 2px; }
