@@ -42,8 +42,11 @@ Tecnología: HTML y JavaScript sin frameworks (GitHub Pages) + base de datos **S
 3. En 1 o 2 minutos el portal queda en:
    **https://ftrevinor001-tr.github.io/Portal-seguimiento-de-pedidos/**
 
-### 5. Carga inicial de datos
-1. Abre el portal y escribe o elige tu nombre.
+### 5. Crear el usuario de captura (contraseña)
+Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md): se crea un usuario en **Authentication → Users** de Supabase y se ejecuta `supabase/actualizacion_1.1.0.sql`.
+
+### 6. Carga inicial de datos
+1. Abre el portal, entra con la contraseña y escribe o elige tu nombre.
 2. Ve a **Datos y bitácora → Carga inicial** y sube `carga_inicial.xlsx`. Es el archivo con los datos ya limpios del Google Sheet y **no va dentro del repositorio**.
 3. Deja marcadas todas las hojas y da clic en **Subir a Supabase**. Tarda menos de un minuto.
 4. Revisa en **Estado de la base** que haya 7,895 pedidos y 59,320 artículos.
@@ -64,7 +67,7 @@ Tecnología: HTML y JavaScript sin frameworks (GitHub Pages) + base de datos **S
 
 - **Nada se borra físicamente.** "Dar de baja" oculta la clave, y se puede recuperar con "Ver dados de baja" → Restaurar.
 - **Cada alta, cambio, baja o restauración** queda en la bitácora con el nombre de quien lo hizo.
-- **Acceso:** cualquiera con el link puede ver y editar. La llave pública viaja en la página, así que no compartas el link fuera del equipo.
+- **Acceso (v1.1.0):** cualquiera con el link puede **ver y descargar**; para **capturar o modificar** se necesita la contraseña (botón *Entrar para editar*). Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md).
 
 ## Configuración (`assets/js/config.js`)
 
@@ -72,6 +75,7 @@ Tecnología: HTML y JavaScript sin frameworks (GitHub Pages) + base de datos **S
 |---|---|---|
 | `CAPACIDAD_HORAS_DIA` | 8 | Horas de descarga por día que se consideran carga "Alta" en el calendario |
 | `UMBRAL_CARGA_MEDIA` | 0.5 | Desde 50% de la capacidad (4 h) la carga es "Media"; por debajo es "Baja" |
+| `USUARIO_EDICION` | `captura@portalpedidos.mx` | Correo del usuario de Supabase que se usa al entrar con contraseña |
 | `DIAS_NOTIFICAR` | 5 | La ALERTA pasa a NOTIFICAR cuando faltan menos de 5 días para la fecha estimada |
 | `MONTO_PAGO_PARCIAL` / `PCT_PAGO_PARCIAL` | 200,000 / 0.7 | Pago mínimo del 70% en sobrepedidos mayores a $200,000 |
 
@@ -85,4 +89,6 @@ Ver [`docs/reglas-de-calculo.md`](docs/reglas-de-calculo.md). Incluye la validac
 - **"Las tablas no existen en Supabase"**: falta ejecutar `supabase/schema.sql`.
 - **"La llave de Supabase no es válida"**: copiaste mal la llave o pegaste la de otro proyecto.
 - **No se ven los cambios después de subir archivos**: espera 2 minutos, recarga con Ctrl+F5 y sube el `?v=` en `index.html`.
+- **"Para guardar cambios necesitas entrar con la contraseña"**: entraste solo a consultar; usa *Entrar para editar*. Si ya entraste y sigue apareciendo, ejecuta `supabase/actualizacion_1.1.0.sql`.
+- **"Contraseña incorrecta"**: revisa la contraseña del usuario en Supabase → Authentication → Users (se puede cambiar ahí mismo).
 - **Supabase pausa el proyecto** tras 7 días sin uso en el plan gratuito: entra al dashboard y da clic en *Restore*.
