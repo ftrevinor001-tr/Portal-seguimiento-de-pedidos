@@ -2,6 +2,25 @@
 (function () {
   const RECALC_KEYS = ['fecha_solicitud', 'dias_inicio', 'dias_fin', 'tipo_dias'];
 
+  /** Línea de tiempo de las 4 etapas del ticket */
+  function etapasHTML(p) {
+    const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol);
+    const clase = (e) => e.estado === 'HECHA' ? (e.cumple ? 'et-ok' : 'et-mal') : e.estado === 'EN CURSO' ? (e.cumple ? 'et-curso' : 'et-tarde') : e.estado === 'INACTIVA' ? 'et-off' : 'et-pend';
+    const dias = (e) => e.dias === null ? '—' : `${e.dias} d`;
+    const vig = t.vigente && t.venceEn !== null
+      ? (t.venceEn < 0 ? `<span class="warn-box">La cotización venció el ${U.fmtDate(t.vigente)} (hace ${-t.venceEn} días) sin respuesta del usuario: hay que recotizar.</span>`
+        : `<div class="muted small">Cotización vigente hasta el ${U.fmtDate(t.vigente)} (${t.venceEn} día(s)).</div>`)
+      : '';
+    return `<div class="etapas">
+      <div class="etapas-row">${t.etapas.map((e) => `<div class="etapa ${clase(e)}" title="${U.esc(e.desc)} · ${U.esc(e.quien)}">
+        <div class="et-n">${e.n}</div><div class="et-lb">${U.esc(e.label)}</div>
+        <div class="et-d">${dias(e)}</div>
+        <div class="et-st">${e.estado === 'INACTIVA' ? 'Se activa si vence' : e.estado === 'HECHA' ? `meta ${e.meta} d` : e.estado.toLowerCase()}</div>
+      </div>`).join('')}</div>
+      <div class="etapas-pie"><b>${U.esc(t.actual)}</b> · ${t.total === null ? '' : `${t.total} días hábiles desde que se levantó el ticket`}</div>
+      ${vig}</div>`;
+  }
+
   function resumen(p) {
     const chip = (l, v) => `<div class="chip"><span>${U.esc(l)}</span><b>${v === '' || v === null || v === undefined ? '—' : v}</b></div>`;
     return `<div class="chips">
@@ -13,7 +32,7 @@
       ${chip('Facturación', U.esc(p._estatus_fact))}
       ${chip('Clasificación', U.esc(p._clasificacion))}
       ${p.modulo === 'SOBREPEDIDO' ? chip('% pago mínimo', U.fmtPct(p._pct_minimo, 0)) + chip('Cumple política', U.esc(p._cumple_politica)) : ''}
-    </div>`;
+    </div>${p.modulo === 'TICKET' ? etapasHTML(p) : ''}`;
   }
 
   APP.abrirDetalle = function (id) {
@@ -68,6 +87,17 @@
           const ini = form.querySelector('[name="fecha_estimada_inicio"]'); if (ini && fe.inicio) ini.value = fe.inicio;
         }
       }
+      // Vencimiento de la cotización = fecha de respuesta + vigencia (días naturales)
+      if (esTicket && ['fecha_cotizacion_usuario', 'vigencia_dias', 'fecha_recotizacion_usuario', 'vigencia_dias_2'].includes(k)) {
+        const seg = k.endsWith('_2') || k === 'fecha_recotizacion_usuario';
+        const fBase = form.querySelector(seg ? '[name="fecha_recotizacion_usuario"]' : '[name="fecha_cotizacion_usuario"]');
+        const fVig = form.querySelector(seg ? '[name="vigencia_dias_2"]' : '[name="vigencia_dias"]');
+        const fVence = form.querySelector(seg ? '[name="fecha_vence_cotizacion_2"]' : '[name="fecha_vence_cotizacion"]');
+        if (fBase && fVence && fBase.value) {
+          if (!fVig.value) fVig.value = C.METAS_TICKET().vigencia;
+          fVence.value = C.venceCotizacion(fBase.value, fVig.value, null);
+        }
+      }
       if (k === 'fecha_real_llegada') {
         const s = form.querySelector('[name="status_pedido"]');
         const actual = s ? U.norm(s.value) : '';
@@ -104,14 +134,41 @@
       U.$$('input, select, textarea', form).forEach((el) => { el.disabled = true; });
       U.$('[data-a="login"]', d.el).onclick = () => { d.close(); APP.entrar('Para modificar esta clave necesitas la contraseña.'); };
     }
+    // --- Tickets: la etapa 3 (recotización) permanece bloqueada hasta que vence la cotización sin respuesta
+    const esTicket = p.modulo === 'TICKET';
+    const camposFolio = S.fieldsFor(p.modulo).filter((f) => f.folio).map((f) => f.k);
+    if (esTicket) {
+      const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol);
+      const fs = [...U.$$('fieldset', form)].find((x) => U.norm(U.$('legend', x).textContent) === 'ETAPAS DEL TICKET');
+      if (fs) {
+        const nota = U.h(`<p class="muted small">Estos datos son del <b>ticket completo</b>: al guardar se aplican a las ${S.clavesDelFolio(p).length} clave(s) del folio.</p>`);
+        U.$('legend', fs).after(nota);
+        if (!t.recotizaActiva && S.puedeEditar()) {
+          ['fecha_recotizacion_usuario', 'vigencia_dias_2', 'fecha_vence_cotizacion_2'].forEach((k) => {
+            const el = form.querySelector(`[name="${k}"]`); if (el) { el.disabled = true; el.closest('.fld').classList.add('fld-off'); }
+          });
+          const avisoWrap = form.querySelector('[name="fecha_recotizacion_usuario"]');
+          if (avisoWrap) avisoWrap.closest('.fld').insertAdjacentHTML('beforeend', '<small>🔒 Se activa cuando la cotización vence sin respuesta del usuario.</small>');
+        }
+      }
+    }
+
     const save = U.$('[data-a="save"]', d.el);
     if (save) save.onclick = async () => {
       const ch = cambios();
       if (!Object.keys(ch).length) { UI.toast('No hay cambios', 'warn'); return; }
       if (!APP.requiereEdicion()) return;
       const btn = U.$('[data-a="save"]', d.el); btn.disabled = true; btn.textContent = 'Guardando…';
-      try { await S.updatePedido(p.id, ch); UI.toast(`Guardado (${Object.keys(ch).length} campo(s))`); d.close(); APP.abrirDetalle(p.id); }
-      catch (e) { UI.toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Guardar'; }
+      try {
+        // Las etapas del ticket se guardan en todas las claves del folio; lo demás solo en esta clave
+        const folio = {}, propio = {};
+        for (const [k, v] of Object.entries(ch)) (esTicket && camposFolio.includes(k) ? folio : propio)[k] = v;
+        let msg = '';
+        if (Object.keys(folio).length) { const n = await S.updateFolio(p, folio); msg = ` · etapas aplicadas a ${n} clave(s) del folio`; }
+        if (Object.keys(propio).length) await S.updatePedido(p.id, propio);
+        UI.toast(`Guardado (${Object.keys(ch).length} campo(s))${msg}`);
+        d.close(); APP.abrirDetalle(p.id);
+      } catch (e) { UI.toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Guardar'; }
     };
     const baja = U.$('[data-a="baja"]', d.el), rest = U.$('[data-a="restore"]', d.el);
     if (baja) baja.onclick = async () => {

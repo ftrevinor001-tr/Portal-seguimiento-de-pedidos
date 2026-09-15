@@ -3,12 +3,12 @@
   const PLANTILLA = 'CLAVE,DESCRIPCION,CANTIDAD\r\n';
   const LS_MODO = 'sp_modo_comprador';
 
-  APP.nuevoPedido = function () {
+  APP.nuevoPedido = function (tipoInicial) {
     if (!APP.requiereEdicion('Para capturar un pedido necesitas la contraseña.')) return;
     const hoy = S.hoy;
     let modoGuardado = null;
     try { modoGuardado = localStorage.getItem(LS_MODO); } catch { /* sin storage */ }
-    const st = { tipo: 'ENTREGA DIRECTA', lineas: [], manualTE: false, manualTD: false, compModo: C.MODOS_COMPRADOR.includes(modoGuardado) ? modoGuardado : 'CLAVES' };
+    const st = { tipo: C.TIPOS_SOLICITUD.includes(tipoInicial) ? tipoInicial : 'ENTREGA DIRECTA', lineas: [], manualTE: false, manualTD: false, compModo: C.MODOS_COMPRADOR.includes(modoGuardado) ? modoGuardado : 'CLAVES' };
     const body = U.h(`<form class="pf" autocomplete="off">
       <section class="pf-sec"><h3>Tipo de solicitud</h3>
         <div class="grid-fields"><div class="fld"><label for="pf_tipo">Selecciona el tipo de solicitud *</label><select id="pf_tipo" name="tipo">${U.options(C.TIPOS_SOLICITUD, st.tipo)}</select><small>La captura se adapta según el tipo seleccionado.</small></div></div>
