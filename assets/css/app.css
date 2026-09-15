@@ -271,3 +271,36 @@ details.grp summary > b { color: var(--brand-1); }
 .pill-ro { background: rgba(255, 255, 255, .18); border-color: rgba(255, 255, 255, .5); }
 .det-foot .pill-ro, .card-head .pill-ro { background: var(--warning-bg); border: 1px solid #f5dc93; color: #6b4a00; }
 #loginForm .fld { margin-bottom: 10px; } #loginForm input[type=password] { letter-spacing: 2px; }
+
+/* v1.2.0 · Etapas del ticket */
+.etapas { margin: 10px 0 4px; }
+.etapas-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.etapa { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; background: #fff; position: relative; }
+.etapa .et-n { position: absolute; top: 6px; right: 9px; font-size: 11px; font-weight: 800; opacity: .45; }
+.etapa .et-lb { font-size: 12px; font-weight: 700; color: var(--ink-2); }
+.etapa .et-d { font-size: 20px; font-weight: 800; line-height: 1.15; }
+.etapa .et-st { font-size: 11px; color: var(--muted); }
+.et-ok { background: var(--good-bg); border-color: #b8e8b8; } .et-ok .et-d { color: var(--ok-2); }
+.et-mal { background: var(--critical-bg); border-color: #f2b8b8; } .et-mal .et-d { color: var(--critical); }
+.et-curso { background: var(--info-bg); border-color: #bcd3f2; } .et-curso .et-d { color: var(--info); }
+.et-tarde { background: var(--warning-bg); border-color: #f5dc93; } .et-tarde .et-d { color: var(--warning); }
+.et-off { background: #f7f8fb; border-style: dashed; } .et-off .et-d, .et-pend .et-d { color: var(--muted); }
+.etapas-pie { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+.etapas .warn-box { margin-top: 8px; display: block; }
+.fld-off { opacity: .6; }
+
+.flujo { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.flujo-paso { font: inherit; cursor: pointer; border: 1px solid var(--line); background: #fff; border-radius: 12px; padding: 10px 8px; text-align: center; display: grid; gap: 2px; }
+.flujo-paso:hover { border-color: var(--brand); }
+.flujo-paso.on { border-color: var(--brand); box-shadow: 0 0 0 2px rgba(217, 102, 15, .18); }
+.flujo-paso .fp-n { font-size: 22px; font-weight: 800; }
+.flujo-paso .fp-lb { font-size: 11px; font-weight: 700; color: var(--ink-2); letter-spacing: .2px; }
+.flujo-paso .fp-pct { font-size: 11px; color: var(--muted); }
+.fp-warning .fp-n { color: var(--warning); } .fp-critical .fp-n { color: var(--critical); }
+.fp-info .fp-n { color: var(--info); } .fp-ok .fp-n { color: var(--ok-2); }
+
+.dias { display: inline-block; min-width: 30px; padding: 2px 7px; border-radius: 8px; font-weight: 700; font-size: 12px; }
+.dias-ok { background: var(--good-bg); color: var(--ok-2); } .dias-mal { background: var(--critical-bg); color: var(--critical); }
+.dias-curso { background: var(--info-bg); color: var(--info); } .dias-tarde { background: var(--warning-bg); color: var(--warning); }
+
+@media (max-width: 900px) { .etapas-row, .flujo { grid-template-columns: repeat(2, 1fr); } }
