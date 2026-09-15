@@ -7,6 +7,7 @@
   APP.NAV = [
     { k: 'seguimiento', label: 'Seguimiento' },
     { k: 'calendario', label: 'Calendario E. Directas' },
+    { k: 'tickets', label: 'Tickets' },
     { k: 'compradores', label: 'Compradores' },
     { k: 'reporte', label: 'Reporte mensual' },
     { k: 'catalogos', label: 'Catálogos' },

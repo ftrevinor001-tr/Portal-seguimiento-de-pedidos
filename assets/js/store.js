@@ -56,7 +56,7 @@
   /* ------------------ Campos (definición central) ------------------ */
   // type: text | textarea | num | money | pct | date | datetime | select | bool ; list: nombre de lista ; mods: módulos donde aplica
   const ALL = ['SOBREPEDIDO', 'ENTREGA_DIRECTA', 'TICKET'];
-  const SP = ['SOBREPEDIDO'], ED = ['ENTREGA_DIRECTA'], EDT = ['ENTREGA_DIRECTA', 'TICKET'];
+  const SP = ['SOBREPEDIDO'], ED = ['ENTREGA_DIRECTA'], EDT = ['ENTREGA_DIRECTA', 'TICKET'], TK = ['TICKET'];
   S.FIELDS = [
     { k: 'tipo_solicitud', label: 'Tipo de solicitud', type: 'select', list: 'TIPO_SOLICITUD', mods: ALL, sec: 'Solicitud' },
     { k: 'folio_pedido', label: 'Folio del pedido', type: 'text', mods: ALL, sec: 'Solicitud' },
@@ -93,6 +93,18 @@
     { k: 'directo_sanver', label: 'Directo Sanver', type: 'select', list: 'DIRECTO_SANVER', mods: ED, sec: 'Tiempos de entrega' },
     { k: 'tipo_directo', label: 'Tipo directo', type: 'text', mods: EDT, sec: 'Tiempos de entrega' },
     { k: 'alerta_id_oc', label: 'Alerta ID (OC)', type: 'select', list: 'ALERTA_OC', mods: EDT, sec: 'Tiempos de entrega' },
+
+    // Etapas del ticket (v1.2.0). Se capturan por folio: al guardar se aplican a todas las claves del ticket.
+    { k: 'fecha_asignacion', label: 'Fecha de asignación del ticket', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'asignado_por', label: 'Asignado por (jefe de área)', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_cotizacion_usuario', label: 'Respuesta al usuario con cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'vigencia_dias', label: 'Vigencia de la cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_vence_cotizacion', label: 'Vence la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_aceptacion_usuario', label: 'El usuario acepta la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_recotizacion_usuario', label: 'Respuesta al usuario con la RE-cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
+    { k: 'vigencia_dias_2', label: 'Vigencia de la re-cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
+    { k: 'fecha_vence_cotizacion_2', label: 'Vence la re-cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
+    { k: 'nota_etapas', label: 'Nota de seguimiento del ticket', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
 
     { k: 'folio_factura', label: 'Folio de factura', type: 'text', mods: ED, sec: 'Facturación' },
     { k: 'fecha_facturacion', label: 'Fecha de facturación', type: 'date', mods: ALL, sec: 'Facturación' },
@@ -236,6 +248,20 @@
     S.emit('data');
     return merged;
   };
+  /** Claves activas del mismo folio y módulo (las etapas del ticket se capturan por folio) */
+  S.clavesDelFolio = function (p) {
+    if (!p || U.blank(p.folio_pedido)) return p ? [p] : [];
+    const f = U.norm(p.folio_pedido);
+    const out = S.pedidos.filter((x) => x.modulo === p.modulo && U.norm(x.folio_pedido) === f);
+    return out.length ? out : [p];
+  };
+  /** Aplica un cambio a todas las claves del folio (etapas del ticket) */
+  S.updateFolio = async function (p, patch) {
+    const ids = S.clavesDelFolio(p).map((x) => x.id);
+    await S.updateMany(ids, patch);
+    return ids.length;
+  };
+
   /** Actualiza varios pedidos con el mismo cambio */
   S.updateMany = async function (ids, patch) {
     requireUser();

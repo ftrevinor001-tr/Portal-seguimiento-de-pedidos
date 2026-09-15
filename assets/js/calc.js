@@ -159,6 +159,77 @@
     return est < hoy ? 'PEND_VENCIDA' : 'PEND_EN_PLAZO';
   };
 
+  /* ------------------ Etapas del TICKET (v1.2.0) ------------------ */
+  /* 1 Asignación: del ticket levantado a que el jefe de área asigna comprador.
+     2 Cotización: de la asignación a la respuesta al usuario con la cotización.
+     3 Recotización: INACTIVA; se activa solo si la cotización vence sin respuesta del usuario.
+     4 Entrega: de que el usuario acepta la cotización a que el artículo llega a SANVER.
+     Los tiempos se miden en días hábiles (L-V, sin días inhábiles) y la vigencia en días naturales. */
+  C.METAS_TICKET = () => Object.assign({ asignacion: 1, cotizacion: 2, recotizacion: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }, CFG().METAS_TICKET || {});
+  C.ETAPAS_TICKET = [
+    { k: 'asignacion', n: 1, label: 'Asignación', quien: 'Jefe de área', desc: 'Del ticket levantado a la asignación del comprador' },
+    { k: 'cotizacion', n: 2, label: 'Cotización', quien: 'Comprador', desc: 'De la asignación a la respuesta al usuario con la cotización' },
+    { k: 'recotizacion', n: 3, label: 'Recotización', quien: 'Comprador', desc: 'Solo si la cotización venció sin respuesta del usuario' },
+    { k: 'entrega', n: 4, label: 'Entrega', quien: 'Proveedor', desc: 'De la aceptación del usuario a la llegada a SANVER' },
+  ];
+  C.ETAPA_LABEL = Object.fromEntries(C.ETAPAS_TICKET.map((e) => [e.k, e.label]));
+  /** Días hábiles transcurridos entre dos fechas (mismo día = 0) */
+  C.diasHabiles = (a, b, hol) => (!a || !b) ? null : Math.max(0, U.networkdays(a, b, hol) - 1);
+  /** Vencimiento de una cotización: el capturado o fecha + vigencia (días naturales) */
+  C.venceCotizacion = function (fecha, dias, capturado) {
+    const cap = U.iso(capturado); if (cap) return cap;
+    const f = U.iso(fecha); if (!f) return null;
+    const d = dias === null || dias === undefined || dias === '' ? C.METAS_TICKET().vigencia : Number(dias);
+    return isNaN(d) ? null : U.addDays(f, d);
+  };
+  /**
+   * Devuelve { etapas:[{k,label,ini,fin,dias,meta,estado,cumple}], actual, vence, vence2, venceEn, recotizaActiva, total }
+   * estado: HECHA | EN CURSO | PENDIENTE | INACTIVA | CANCELADA
+   */
+  C.etapasTicket = function (p, hoy, hol) {
+    const metas = C.METAS_TICKET();
+    const solicitud = U.iso(p.fecha_solicitud), asign = U.iso(p.fecha_asignacion), cot = U.iso(p.fecha_cotizacion_usuario);
+    const acept = U.iso(p.fecha_aceptacion_usuario), recot = U.iso(p.fecha_recotizacion_usuario), llegada = U.iso(p.fecha_real_llegada);
+    const vence = cot ? C.venceCotizacion(cot, p.vigencia_dias, p.fecha_vence_cotizacion) : null;
+    const vence2 = recot ? C.venceCotizacion(recot, p.vigencia_dias_2, p.fecha_vence_cotizacion_2) : null;
+    const cancelado = C.cancelado(p);
+    // La etapa 3 se activa solo si la cotización venció sin que el usuario aceptara
+    const recotizaActiva = !acept && !!vence && (vence < hoy || !!recot);
+    const tramos = [
+      { k: 'asignacion', ini: solicitud, fin: asign, activa: true },
+      { k: 'cotizacion', ini: asign, fin: cot, activa: !!asign },
+      { k: 'recotizacion', ini: recotizaActiva ? vence : null, fin: recot, activa: recotizaActiva },
+      { k: 'entrega', ini: acept, fin: llegada, activa: !!acept },
+    ];
+    const etapas = tramos.map((t) => {
+      const def = C.ETAPAS_TICKET.find((e) => e.k === t.k);
+      const meta = metas[t.k];
+      let estado, dias = null;
+      if (cancelado && !t.fin) estado = 'CANCELADA';
+      else if (t.fin && t.ini) { estado = 'HECHA'; dias = C.diasHabiles(t.ini, t.fin, hol); }
+      else if (t.ini) { estado = 'EN CURSO'; dias = C.diasHabiles(t.ini, hoy, hol); }
+      else estado = t.k === 'recotizacion' && !recotizaActiva ? 'INACTIVA' : 'PENDIENTE';
+      const cumple = dias === null ? null : dias <= meta;
+      return { ...def, ini: t.ini, fin: t.fin, dias, meta, estado, cumple, enCurso: estado === 'EN CURSO' };
+    });
+    let actual;
+    if (cancelado) actual = 'CANCELADO';
+    else if (llegada) actual = 'ENTREGADO';
+    else if (acept) actual = 'EN SURTIMIENTO';
+    else if (recot) actual = vence2 && vence2 < hoy ? 'POR RECOTIZAR' : 'ESPERA DEL USUARIO';
+    else if (recotizaActiva) actual = 'POR RECOTIZAR';
+    else if (cot) actual = 'ESPERA DEL USUARIO';
+    else if (asign) actual = 'EN COTIZACIÓN';
+    else actual = 'POR ASIGNAR';
+    const vig = recot ? vence2 : vence;
+    const venceEn = vig && !acept && !llegada && !cancelado ? U.diffDays(vig, hoy) : null;  // negativo = ya venció
+    const hechas = etapas.filter((e) => e.estado === 'HECHA');
+    const total = C.diasHabiles(solicitud, llegada || hoy, hol);
+    return { etapas, actual, vence, vence2, vigente: vig, venceEn, recotizaActiva, total, dias: Object.fromEntries(etapas.map((e) => [e.k, e.dias])), cumpleTodas: hechas.length ? hechas.every((e) => e.cumple) : null };
+  };
+  /** true si el ticket necesita recotizarse (venció y el usuario no respondió) */
+  C.requiereRecotizar = (p, hoy, hol) => p.modulo === 'TICKET' && C.etapasTicket(p, hoy, hol).actual === 'POR RECOTIZAR';
+
   /** Agrega los campos calculados (prefijo _) a un pedido */
   C.enriquecer = function (p, hoy, hol) {
     p._alerta = C.alerta(p, hoy);
@@ -172,6 +243,12 @@
     p._cumple_politica = C.cumplePolitica(p);
     p._costo_total = C.costoTotal(p);
     p._cumplimiento = C.cumplimiento(p, hoy);
+    if (p.modulo === 'TICKET') {
+      const t = C.etapasTicket(p, hoy, hol);
+      p._etapas = t; p._etapa = t.actual; p._vence_en = t.venceEn;
+      p._dias_asignacion = t.dias.asignacion; p._dias_cotizacion = t.dias.cotizacion;
+      p._dias_recotizacion = t.dias.recotizacion; p._dias_etapa_entrega = t.dias.entrega;
+    }
     return p;
   };
 
