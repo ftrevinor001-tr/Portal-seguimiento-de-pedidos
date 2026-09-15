@@ -44,6 +44,25 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 - **Registros anteriores**: el comprador guardado en cada pedido **no cambia** al actualizar el maestro de artículos (esa carga solo modifica `sp_articulos`). Si alguien cambió de cartera o dejó la empresa, los pedidos históricos conservan a quien los compró. Solo cambia si alguien lo edita a mano en el detalle o en "Editar seleccionados".
 - **Origen del dato del maestro**: *Datos y bitácora → Actualizar maestro de artículos* con un archivo que tenga CLAVE (o IDARTICULO) y COMPRADOR, como la hoja EXISTENCIAS. Claves repetidas con compradores distintos se guardan como "A | B"; los valores 0 se consideran sin comprador.
 
+## Etapas del TICKET (v1.2.0)
+Cada ticket se mide en cuatro etapas. Los tiempos se cuentan en **días hábiles** (L-V, sin los días inhábiles del catálogo) y el mismo día cuenta como 0.
+
+| # | Etapa | Del … al … | Responsable | Meta |
+|---|---|---|---|---|
+| 1 | Asignación | Fecha de solicitud (ticket levantado) → **Fecha de asignación** | Jefe de área | 1 día |
+| 2 | Cotización | Fecha de asignación → **Respuesta al usuario con cotización** | Comprador | 2 días |
+| 3 | Recotización | **Vencimiento de la cotización** → **Respuesta al usuario con la re-cotización** | Comprador | 2 días |
+| 4 | Entrega | **El usuario acepta la cotización** → **Fecha real de llegada** (a SANVER) | Proveedor | 15 días |
+
+- **Vigencia de la cotización**: se captura en cada cotización (por default 15 **días naturales**). Si no se escribe la fecha de vencimiento, se calcula como respuesta al usuario + vigencia.
+- **La etapa 3 está inactiva** (bloqueada en el detalle) hasta que se cumplen dos condiciones: la cotización venció y el usuario no aceptó. En ese momento se activa y empieza a correr desde la fecha de vencimiento. La re-cotización tiene su propia vigencia.
+- Si el usuario acepta antes del vencimiento, la etapa 3 nunca se activa y el ticket pasa directo a la etapa 4.
+- **Etapa actual**: POR ASIGNAR → EN COTIZACIÓN → ESPERA DEL USUARIO → (POR RECOTIZAR) → EN SURTIMIENTO → ENTREGADO. Un ticket cancelado se marca como CANCELADO.
+- **Captura**: las fechas de etapas son del **ticket completo**. Se capturan en el detalle de cualquier clave y al guardar se aplican a todas las claves del folio.
+- **Metas**: se ajustan en `config.js` con `METAS_TICKET: { asignacion: 1, cotizacion: 2, recotizacion: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }`.
+- **Semáforo**: verde = etapa terminada dentro de la meta; rojo = terminada fuera de meta; azul = en curso dentro de meta; amarillo = en curso ya pasada la meta.
+- **Pantalla Tickets**: KPIs por etapa, cuántos tickets hay en cada paso del flujo, promedio y % dentro de meta por etapa, y la tabla de tickets con los días de cada etapa. Todo se descarga a Excel.
+
 ## Fecha estimada (al capturar o editar)
 - **Días**: se toman del catálogo *Tiempos de entrega* (proveedor + solicitante) o del texto "DE 10 A 15 DIAS".
 - **Entrega directa y tickets**:
