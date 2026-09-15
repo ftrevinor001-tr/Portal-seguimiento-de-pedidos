@@ -4,7 +4,7 @@
   const LS_MODO = 'sp_modo_comprador';
 
   APP.nuevoPedido = function () {
-    if (!S.user) { APP.pickUser(true); UI.toast('Primero indica tu nombre', 'warn'); return; }
+    if (!APP.requiereEdicion('Para capturar un pedido necesitas la contraseña.')) return;
     const hoy = S.hoy;
     let modoGuardado = null;
     try { modoGuardado = localStorage.getItem(LS_MODO); } catch { /* sin storage */ }

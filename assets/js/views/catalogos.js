@@ -31,11 +31,12 @@
     const def = DEFS[st.tab];
     U.$('#catBody', root).innerHTML = `
       <p class="muted">${U.esc(def.help)}</p>
-      <div class="cat-tools"><input type="search" id="catQ" placeholder="Buscar…" value="${U.esc(st.q)}" aria-label="Buscar en catálogo"><label class="chk"><input type="checkbox" id="catIn" ${st.inactivos ? 'checked' : ''}> Ver desactivados</label><span class="spacer"></span><button class="btn btn-primary btn-sm" id="catAdd">＋ Agregar</button></div>
+      <div class="cat-tools"><input type="search" id="catQ" placeholder="Buscar…" value="${U.esc(st.q)}" aria-label="Buscar en catálogo"><label class="chk"><input type="checkbox" id="catIn" ${st.inactivos ? 'checked' : ''}> Ver desactivados</label><span class="spacer"></span>${S.puedeEditar() ? '<button class="btn btn-primary btn-sm" id="catAdd">＋ Agregar</button>' : '<button class="btn btn-primary btn-sm" id="catEntrar">🔒 Entrar para editar</button>'}</div>
       <div id="catTable"></div>${UI.datalists(['PROVEEDOR', 'SOLICITANTE', 'MARCA'])}`;
     U.$('#catQ', root).addEventListener('input', U.debounce((e) => { st.q = e.target.value; st.page = 0; drawTable(); }, 300));
     U.$('#catIn', root).onchange = (e) => { st.inactivos = e.target.checked; drawTable(); };
-    U.$('#catAdd', root).onclick = () => {
+    const catEntrar = U.$('#catEntrar', root); if (catEntrar) catEntrar.onclick = () => APP.entrar('Para agregar o cambiar catálogos necesitas la contraseña.');
+    const catAdd = U.$('#catAdd', root); if (catAdd) catAdd.onclick = () => {
       const tb = U.$('#catTable tbody', root);
       if (tb.querySelector('tr[data-id="new"]')) return;
       const tr = U.h(`<table><tr data-id="new" class="row-new">${def.cols.map((c) => `<td>${input(c, c.k === 'lista' ? 'COMPRADOR' : '')}</td>`).join('')}<td><input type="checkbox" data-k="activo" checked></td><td><button class="btn btn-sm btn-success" data-save>Guardar</button></td></tr></table>`).querySelector('tr');
@@ -61,9 +62,10 @@
   function bindRow(tr) {
     const def = DEFS[st.tab];
     const btn = tr.querySelector('[data-save]');
+    if (!S.puedeEditar()) { tr.querySelectorAll('[data-k]').forEach((el) => { el.disabled = true; }); btn.hidden = true; return; }
     tr.querySelectorAll('[data-k]').forEach((el) => el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => { btn.disabled = false; }));
     btn.onclick = async () => {
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       const row = { id: tr.dataset.id === 'new' ? null : +tr.dataset.id };
       tr.querySelectorAll('[data-k]').forEach((el) => {
         const c = def.cols.find((x) => x.k === el.dataset.k);

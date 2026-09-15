@@ -56,7 +56,7 @@
     const m = UI.modal({ title: 'Carga inicial', body, footer: '<button class="btn btn-ghost" data-a="c">Cancelar</button><button class="btn btn-primary" data-a="s">Subir a Supabase</button>' });
     U.$('[data-a="c"]', m.el).onclick = m.close;
     U.$('[data-a="s"]', m.el).onclick = async () => {
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       const sel = U.$$('[data-i]:checked', m.el).map((c) => plan[+c.dataset.i]);
       if (!sel.length) { UI.toast('No seleccionaste hojas', 'warn'); return; }
       m.close();
@@ -118,7 +118,7 @@
       const rows = [...out.values()];
       UI.loading(false);
       if (!(await UI.confirm(`Hoja “${best.sh}”: ${U.fmtNum(rows.length)} artículos. Se actualizarán por clave los datos que traiga el archivo${'comprador' in best.idx ? ' (incluye COMPRADOR)' : ''}. ¿Continuar?`))) return;
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       const ld2 = UI.loading('Actualizando artículos…');
       const stamp = new Date().toISOString();
       await API.upsert('sp_articulos', rows.map((r) => ({ ...r, actualizado_en: stamp })), 'clave', { onProgress: (d, t) => ld2.progress(d, t, `Artículos ${U.fmtNum(d)} de ${U.fmtNum(t)}`) });
@@ -176,17 +176,18 @@
           <section class="card"><div class="card-head"><h2>Descargar información</h2></div>
             <p class="muted">Excel con los tres módulos (incluye campos calculados y dados de baja) y los catálogos.</p>
             <button class="btn btn-primary" id="btnBase">⭳ Descargar base completa (Excel)</button></section>
-          <section class="card"><div class="card-head"><h2>Actualizar maestro de artículos</h2></div>
+          <section class="card"><div class="card-head"><h2>Actualizar maestro de artículos</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
             <p class="muted">Sube la exportación del sistema (hoja con <b>IDARTICULO</b> y <b>EXIUNIBAS</b>, como la pestaña “E”) o un archivo con CLAVE y COMPRADOR (asignación de compradores). También acepta CSV con CLAVE, DESCRIPCION, MARCA, UNIDAD, EXISTENCIA, COSTO, COMPRADOR. Actualiza por clave solo las columnas que traiga.</p>
-            <input type="file" id="fileArt" accept=".xlsx,.csv"><div id="lastArt" class="muted small"></div></section>
+            ${S.puedeEditar() ? '<input type="file" id="fileArt" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para actualizar</button>'}<div id="lastArt" class="muted small"></div></section>
           <section class="card"><div class="card-head"><h2>Carga inicial</h2></div>
             <p class="muted">Solo la primera vez: sube <b>carga_inicial.xlsx</b> (datos ya limpios del Google Sheet). Puedes elegir qué hojas subir.</p>
-            <input type="file" id="fileIni" accept=".xlsx"></section>
+            ${S.puedeEditar() ? '<input type="file" id="fileIni" accept=".xlsx">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para cargar</button>'}</section>
         </div>
         <section class="card"><div class="card-head"><h2>Bitácora de cambios</h2></div><div id="bitFilters"></div><div id="bitBox"></div></section>`;
       U.$('#btnBase', c).onclick = descargarBase;
-      U.$('#fileIni', c).onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaInicial(f); };
-      U.$('#fileArt', c).onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaArticulos(f); };
+      const fIni = U.$('#fileIni', c); if (fIni) fIni.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaInicial(f); };
+      const fArt = U.$('#fileArt', c); if (fArt) fArt.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaArticulos(f); };
+      U.$$('[data-entrar]', c).forEach((b) => b.onclick = () => APP.entrar('Para subir archivos al portal necesitas la contraseña.'));
       APP.filterBar(U.$('#bitFilters', c), [
         { k: 'usuario', label: 'Usuario', type: 'search', placeholder: 'Nombre' },
         { k: 'accion', label: 'Acción', options: () => ['ALTA', 'CAMBIO', 'BAJA', 'RESTAURAR'] },

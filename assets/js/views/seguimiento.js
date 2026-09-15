@@ -78,8 +78,8 @@
     const rows = filtrar();
     U.$('#segKpis', root).innerHTML = kpis(rows);
     if (!table) {
-      table = UI.table(U.$('#segTable', root), { cols: COLS, rows, selectable: true, onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1 });
-      table.onSelect = (sel) => { U.$('#btnBulk', root).disabled = !sel.size; U.$('#btnBulk', root).textContent = sel.size ? `Editar ${sel.size} seleccionados` : 'Editar seleccionados'; };
+      table = UI.table(U.$('#segTable', root), { cols: COLS, rows, selectable: S.puedeEditar(), onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1 });
+      table.onSelect = (sel) => { const b = U.$('#btnBulk', root); if (!b) return; b.disabled = !sel.size; b.textContent = sel.size ? `Editar ${sel.size} seleccionados` : 'Editar seleccionados'; };
     } else table.setRows(rows);
     table.onSelect(table.selected());
   }
@@ -107,6 +107,7 @@
   }
 
   async function bulkEdit() {
+    if (!APP.requiereEdicion('Para editar varias claves a la vez necesitas la contraseña.')) return;
     const ids = [...table.selected()];
     const rows = ids.map(S.byId).filter(Boolean);
     const mods = U.uniq(rows.map((p) => p.modulo));
@@ -146,9 +147,9 @@
           <div class="card-head"><h2>Seguimiento de pedidos</h2>
             <div class="head-actions">
               <label class="chk"><input type="checkbox" id="chkBajas" ${st.bajas ? 'checked' : ''}> Ver dados de baja</label>
-              <button class="btn btn-ghost" id="btnBulk" disabled>Editar seleccionados</button>
+              ${S.puedeEditar() ? '<button class="btn btn-ghost" id="btnBulk" disabled>Editar seleccionados</button>' : ''}
               <button class="btn btn-ghost" id="btnXls">⭳ Descargar Excel</button>
-              <button class="btn btn-primary" id="btnNuevo">＋ Nuevo pedido</button>
+              ${S.puedeEditar() ? '<button class="btn btn-primary" id="btnNuevo">＋ Nuevo pedido</button>' : '<button class="btn btn-primary" id="btnEntrarSeg">🔒 Entrar para editar</button>'}
             </div></div>
           <div id="segFilters"></div>
         </section>
@@ -157,9 +158,10 @@
       filtros();
       if (!S.cargado) { U.$('#segTable', c).innerHTML = UI.empty('Cargando…'); return; }
       draw();
-      U.$('#btnNuevo', c).onclick = () => APP.nuevoPedido();
+      const bNuevo = U.$('#btnNuevo', c); if (bNuevo) bNuevo.onclick = () => APP.nuevoPedido();
+      const bEntrar = U.$('#btnEntrarSeg', c); if (bEntrar) bEntrar.onclick = () => APP.entrar();
       U.$('#btnXls', c).onclick = exportar;
-      U.$('#btnBulk', c).onclick = bulkEdit;
+      const bBulk = U.$('#btnBulk', c); if (bBulk) bBulk.onclick = bulkEdit;
       U.$('#chkBajas', c).onchange = async (e) => {
         st.bajas = e.target.checked;
         if (st.bajas && !S.bajas) { const ld = UI.loading('Cargando registros dados de baja…'); try { await S.loadBajas(); } catch (er) { UI.toast(er.message, 'error'); } finally { UI.loading(false); } }

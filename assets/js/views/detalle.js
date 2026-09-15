@@ -34,9 +34,9 @@
       <div data-pane="folio" hidden></div>
     </div>`);
     const footer = U.h(`<div class="det-foot">
-      ${p.activo === false ? '<button class="btn btn-ghost" data-a="restore">Restaurar</button>' : '<button class="btn btn-danger-ghost" data-a="baja">Dar de baja</button>'}
-      <span class="spacer"></span><span class="dirty" hidden>Cambios sin guardar</span>
-      <button class="btn btn-ghost" data-a="close">Cerrar</button><button class="btn btn-primary" data-a="save">Guardar</button></div>`);
+      ${!S.puedeEditar() ? '' : p.activo === false ? '<button class="btn btn-ghost" data-a="restore">Restaurar</button>' : '<button class="btn btn-danger-ghost" data-a="baja">Dar de baja</button>'}
+      <span class="spacer"></span>${S.puedeEditar() ? '<span class="dirty" hidden>Cambios sin guardar</span>' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}
+      <button class="btn btn-ghost" data-a="close">Cerrar</button>${S.puedeEditar() ? '<button class="btn btn-primary" data-a="save">Guardar</button>' : '<button class="btn btn-primary" data-a="login">Entrar para editar</button>'}</div>`);
     const d = UI.drawer({ title: head, body, footer });
     const form = U.$('.det-form', d.el);
     const keys = fields.map((f) => f.k);
@@ -98,23 +98,29 @@
       }
     });
 
-    U.$('[data-a="close"]', d.el).onclick = async () => { if (Object.keys(cambios()).length && !(await UI.confirm('Hay cambios sin guardar. ¿Cerrar de todos modos?'))) return; d.close(); };
-    U.$('[data-a="save"]', d.el).onclick = async () => {
+    U.$('[data-a="close"]', d.el).onclick = async () => { if (S.puedeEditar() && Object.keys(cambios()).length && !(await UI.confirm('Hay cambios sin guardar. ¿Cerrar de todos modos?'))) return; d.close(); };
+    // Sin sesión: los campos se ven pero no se pueden modificar
+    if (!S.puedeEditar()) {
+      U.$$('input, select, textarea', form).forEach((el) => { el.disabled = true; });
+      U.$('[data-a="login"]', d.el).onclick = () => { d.close(); APP.entrar('Para modificar esta clave necesitas la contraseña.'); };
+    }
+    const save = U.$('[data-a="save"]', d.el);
+    if (save) save.onclick = async () => {
       const ch = cambios();
       if (!Object.keys(ch).length) { UI.toast('No hay cambios', 'warn'); return; }
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       const btn = U.$('[data-a="save"]', d.el); btn.disabled = true; btn.textContent = 'Guardando…';
       try { await S.updatePedido(p.id, ch); UI.toast(`Guardado (${Object.keys(ch).length} campo(s))`); d.close(); APP.abrirDetalle(p.id); }
       catch (e) { UI.toast(e.message, 'error'); btn.disabled = false; btn.textContent = 'Guardar'; }
     };
     const baja = U.$('[data-a="baja"]', d.el), rest = U.$('[data-a="restore"]', d.el);
     if (baja) baja.onclick = async () => {
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       if (!(await UI.confirm('La clave se ocultará de los tableros. Queda en la bitácora y se puede restaurar desde “Ver dados de baja”. ¿Continuar?', { ok: 'Dar de baja', danger: true }))) return;
       try { await S.updatePedido(p.id, { activo: false }); UI.toast('Clave dada de baja'); d.close(); } catch (e) { UI.toast(e.message, 'error'); }
     };
     if (rest) rest.onclick = async () => {
-      if (!S.user) { APP.pickUser(true); return; }
+      if (!APP.requiereEdicion()) return;
       try { await S.updatePedido(p.id, { activo: true }); UI.toast('Clave restaurada'); d.close(); } catch (e) { UI.toast(e.message, 'error'); }
     };
   };
