@@ -65,6 +65,7 @@ Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md): se crea un usu
 | Dar de alta días festivos | Catálogos → **Días inhábiles** |
 | Asignar un ticket, cotizar, autorizar, pagar o registrar la llegada | Tickets → clic en el ticket → sección **Etapas del ticket** |
 | Cargar el reporte de tickets (reemplaza los tickets del portal) | Datos y bitácora → **Tickets · reporte** |
+| Reemplazar sobrepedido y entregas directas con un archivo | Datos y bitácora → **Sobrepedido y entregas directas · reemplazar** |
 | Cambiar los días de cotización por categoría | Catálogos → **Categorías de tickets** |
 | Ver quién cambió qué | Detalle de la clave → **Historial de cambios**, o Datos y bitácora → **Bitácora** |
 | Respaldo / Excel completo | Datos y bitácora → **Descargar base completa** |
