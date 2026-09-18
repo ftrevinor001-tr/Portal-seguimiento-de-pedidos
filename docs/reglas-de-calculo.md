@@ -44,24 +44,43 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 - **Registros anteriores**: el comprador guardado en cada pedido **no cambia** al actualizar el maestro de artículos (esa carga solo modifica `sp_articulos`). Si alguien cambió de cartera o dejó la empresa, los pedidos históricos conservan a quien los compró. Solo cambia si alguien lo edita a mano en el detalle o en "Editar seleccionados".
 - **Origen del dato del maestro**: *Datos y bitácora → Actualizar maestro de artículos* con un archivo que tenga CLAVE (o IDARTICULO) y COMPRADOR, como la hoja EXISTENCIAS. Claves repetidas con compradores distintos se guardan como "A | B"; los valores 0 se consideran sin comprador.
 
-## Etapas del TICKET (v1.2.0)
-Cada ticket se mide en cuatro etapas. Los tiempos se cuentan en **días hábiles** (L-V, sin los días inhábiles del catálogo) y el mismo día cuenta como 0.
+## Etapas del TICKET (v1.3.0 — réplica del REPORTE DE TICKETS)
 
 | # | Etapa | Del … al … | Responsable | Meta |
 |---|---|---|---|---|
-| 1 | Asignación | Fecha de solicitud (ticket levantado) → **Fecha de asignación** | Jefe de área | 1 día |
-| 2 | Cotización | Fecha de asignación → **Respuesta al usuario con cotización** | Comprador | 2 días |
-| 3 | Recotización | **Vencimiento de la cotización** → **Respuesta al usuario con la re-cotización** | Comprador | 2 días |
-| 4 | Entrega | **El usuario acepta la cotización** → **Fecha real de llegada** (a SANVER) | Proveedor | 15 días |
+| 1 | Asignación | Fecha y hora de solicitud → **fecha y hora de asignación** | Jefe de área | 24 horas |
+| 2 | Cotización | Asignación → **entrega de la cotización al usuario**, contra la **fecha límite** | Comprador | días de la categoría |
+| 3 | Recotización | Vencimiento de la cotización → **entrega de la re-cotización** | Comprador | 2 días hábiles |
+| 4 | Autorización | Cotización entregada → **autorización de compra** | Usuario | 3 días hábiles |
+| 5 | Pago | Autorización → **pago al proveedor** | Administración | 2 días hábiles |
+| 6 | Llegada | Pago → **fecha real de llegada** (contra la fecha estimada) | Proveedor | 15 días hábiles |
 
-- **Vigencia de la cotización**: se captura en cada cotización (por default 15 **días naturales**). Si no se escribe la fecha de vencimiento, se calcula como respuesta al usuario + vigencia.
-- **La etapa 3 está inactiva** (bloqueada en el detalle) hasta que se cumplen dos condiciones: la cotización venció y el usuario no aceptó. En ese momento se activa y empieza a correr desde la fecha de vencimiento. La re-cotización tiene su propia vigencia.
-- Si el usuario acepta antes del vencimiento, la etapa 3 nunca se activa y el ticket pasa directo a la etapa 4.
-- **Etapa actual**: POR ASIGNAR → EN COTIZACIÓN → ESPERA DEL USUARIO → (POR RECOTIZAR) → EN SURTIMIENTO → ENTREGADO. Un ticket cancelado se marca como CANCELADO.
-- **Captura**: las fechas de etapas son del **ticket completo**. Se capturan en el detalle de cualquier clave y al guardar se aplican a todas las claves del folio.
-- **Metas**: se ajustan en `config.js` con `METAS_TICKET: { asignacion: 1, cotizacion: 2, recotizacion: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }`.
-- **Semáforo**: verde = etapa terminada dentro de la meta; rojo = terminada fuera de meta; azul = en curso dentro de meta; amarillo = en curso ya pasada la meta.
-- **Pantalla Tickets**: KPIs por etapa, cuántos tickets hay en cada paso del flujo, promedio y % dentro de meta por etapa, y la tabla de tickets con los días de cada etapa. Todo se descarga a Excel.
+- **Tiempo de asignación**: diferencia exacta entre solicitud y asignación, en horas y minutos (`(fecha+hora asignación) − (fecha+hora solicitud)`), como la fórmula del reporte. Acumula más de 24 horas.
+- **Fecha límite de cotización** = fecha de solicitud + los **días hábiles de la categoría** (Catálogos → *Categorías de tickets*, cargadas de la hoja T.E. COTIZACIONES). Se puede escribir a mano; si se elige otra categoría se recalcula.
+- **ALERTA COTIZACIÓN** (igual que el Excel): cancelado → `CANCELADO`; sin fecha límite → `SIN FECHA LIMITE`; con entrega: después del límite → `FUERA DEL PLAZO`, si no `FINALIZADO`; sin entrega: hoy > límite → `FUERA DEL PLAZO`, hoy = límite → `VENCE HOY`, falta 1 día → `POR VENCER`, si no `EN TIEMPO`.
+- **ALERTA COMPRA** (igual que el Excel): cancelado → `CANCELADO`; sin autorización → `SIN AUTORIZACION DE COMPRA`; sin fecha estimada → `SIN FECHA ESTIMADA`; con llegada real: después de la estimada → `FUERA DEL PLAZO`, si no `FINALIZADO`; sin llegada: mismo criterio contra la fecha estimada.
+- **Días fuera de plazo** = (llegada real o hoy) − fecha estimada, en días naturales, nunca negativo.
+- **Validación de tiempo**: `PENDIENTE DE ASIGNACION` si falta la asignación, `REVISAR FECHA/HORA` si la asignación es anterior a la solicitud, si no `OK`.
+- **Recotización**: sigue inactiva hasta que la cotización entregada **vence sin autorización de compra**. El vencimiento solo existe si se captura la vigencia (días) o la fecha de vencimiento; los tickets históricos, que no la traen, no se marcan solos.
+- **Etapa actual**: POR ASIGNAR → EN COTIZACIÓN → ESPERA DEL USUARIO → (POR RECOTIZAR) → POR PAGAR → EN SURTIMIENTO → ENTREGADO; cancelado aparte.
+- **Captura por ticket**: las fechas de etapas son del folio completo; se capturan en el detalle de cualquier renglón y se guardan en todos los del ticket.
+- **Metas**: `config.js` → `METAS_TICKET: { asignacion_horas: 24, cotizacion: 3, recotizacion: 2, autorizacion: 3, pago: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }`.
+
+### Carga del reporte
+*Datos y bitácora → Tickets · reporte*: se sube el archivo con la hoja **BASE DE DATOS**. El portal da de baja los tickets que ya tiene (quedan en "Ver dados de baja" y en la bitácora), carga los del archivo y, si viene la hoja de categorías, actualiza los días de cotización. Al cargar se corrige el AÑO con la fecha de solicitud, se aceptan fechas escritas a mano tipo "22 DE AGOSTO 26" y se unifican los nombres escritos distinto: comprador JULISSA YAJAIRA → JULISSA YAHAIRA MEZA; solicitantes RH → RECURSOS HUMANOS, CALIDAD → CONTROL DE CALIDAD y ADMINISTRATIVO → ADMINISTRACION. VICTORIA MIRANDA y MARIA VICTORIA son personas distintas y se dejan separadas.
+
+### Validación contra el reporte (18/09/2026, 235 renglones)
+`node tests/tickets.test.js "REPORTE DE TICKETS 2026.xlsx"`
+
+| Columna del reporte | Coincidencia |
+|---|---|
+| TIEMPO DE ASIGNACION | 222/222 = 100% |
+| VALIDACION TIEMPO | 88/88 = 100% |
+| DÍAS FUERA DE PLAZO | 57/57 = 100% |
+| ALERTA COTIZACION | 234/235 = 99.6% |
+| ALERTA COMPRA | 222/226 = 98.2% |
+
+Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (sin fórmula) y quedó con valores viejos: "TERMINADO" y "DENTRO DEL PLAZO", que ya no existen en la fórmula actual.
 
 ## Fecha estimada (al capturar o editar)
 - **Días**: se toman del catálogo *Tiempos de entrega* (proveedor + solicitante) o del texto "DE 10 A 15 DIAS".
