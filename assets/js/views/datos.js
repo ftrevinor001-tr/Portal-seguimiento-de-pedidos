@@ -268,6 +268,54 @@
     };
   }
 
+  /* -------- Reemplazar sobrepedido y entregas directas (v1.4.0) -------- */
+  const MOD_LABEL = { SOBREPEDIDO: 'Sobrepedido / especial / sucursal', ENTREGA_DIRECTA: 'Entregas directas' };
+  async function cargaPedidos(file) {
+    const ld = UI.loading('Leyendo el archivo…');
+    let filas = [], hoja = '';
+    try {
+      const wb = await XL.readFile(file);
+      hoja = wb.sheetNames.find((n) => U.norm(n) === 'PEDIDOS') || wb.sheetNames[0];
+      const { rows } = XL.toObjects(await wb.rows(hoja));
+      filas = rows.map((o) => tipar('sp_pedidos', o))
+        .filter((r) => r.modulo === 'SOBREPEDIDO' || r.modulo === 'ENTREGA_DIRECTA');
+    } catch (e) { UI.loading(false); UI.toast(`No se pudo leer el archivo: ${e.message}`, 'error'); return; }
+    UI.loading(false);
+    if (!filas.length) { UI.toast('El archivo no tiene renglones de sobrepedido ni de entregas directas (se espera la hoja PEDIDOS con la columna “modulo”)', 'error'); return; }
+
+    const porMod = (m) => filas.filter((r) => r.modulo === m).length;
+    const actuales = S.pedidos.filter((p) => p.modulo === 'SOBREPEDIDO' || p.modulo === 'ENTREGA_DIRECTA');
+    const sinFecha = filas.filter((r) => !r.fecha_solicitud).length;
+    const body = `<p>Del archivo <b>${U.esc(file.name)}</b> (hoja ${U.esc(hoja)}):</p>
+      <ul class="lista-check">
+        <li><b>${U.fmtNum(porMod('ENTREGA_DIRECTA'))}</b> renglones de entregas directas</li>
+        <li><b>${U.fmtNum(porMod('SOBREPEDIDO'))}</b> renglones de sobrepedido / especial / sucursal</li>
+        <li>Se darán de baja los <b>${U.fmtNum(actuales.length)}</b> renglones que hay hoy en esos dos módulos (quedan en “Ver dados de baja” y en la bitácora).</li>
+        ${sinFecha ? `<li class="error">${U.fmtNum(sinFecha)} renglón(es) sin fecha de solicitud.</li>` : ''}
+      </ul>
+      <p class="warn-box">Los tickets no se tocan. Esta operación solo reemplaza sobrepedido y entregas directas.</p>`;
+    const m = UI.modal({ title: 'Reemplazar sobrepedido y entregas directas', body, footer: '<button class="btn btn-ghost" data-a="c">Cancelar</button><button class="btn btn-success" data-a="s">Dar de baja y cargar</button>' });
+    U.$('[data-a="c"]', m.el).onclick = m.close;
+    U.$('[data-a="s"]', m.el).onclick = async () => {
+      if (!APP.requiereEdicion()) return;
+      m.close();
+      const ld2 = UI.loading('Reemplazando pedidos…');
+      try {
+        if (actuales.length) {
+          ld2.text(`Dando de baja ${U.fmtNum(actuales.length)} renglones anteriores…`);
+          await S.updateMany(actuales.map((p) => p.id), { activo: false });
+        }
+        ld2.text('Cargando el archivo…');
+        const rows = filas.map((r) => ({ ...r, activo: true, creado_por: r.creado_por || `CARGA ${file.name}`.slice(0, 80), actualizado_por: S.user }));
+        await API.insert('sp_pedidos', rows, { returning: false, onProgress: (d, t) => ld2.progress(d, t, `Pedidos ${U.fmtNum(d)} de ${U.fmtNum(t)}`) });
+        await API.insert('sp_cargas', [{ tipo: 'REEMPLAZO_PEDIDOS', archivo: file.name, registros: rows.length, usuario: S.user }], { returning: false });
+        UI.toast(`Listo: ${U.fmtNum(rows.length)} renglones cargados`);
+        await APP.reload();
+        location.hash = '#/seguimiento';
+      } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    };
+  }
+
   /* -------- Descargas -------- */
   async function descargarBase() {
     const ld = UI.loading('Preparando Excel completo…');
@@ -317,6 +365,9 @@
           <section class="card"><div class="card-head"><h2>Actualizar maestro de artículos</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
             <p class="muted">Sube la exportación del sistema (hoja con <b>IDARTICULO</b> y <b>EXIUNIBAS</b>, como la pestaña “E”) o un archivo con CLAVE y COMPRADOR (asignación de compradores). También acepta CSV con CLAVE, DESCRIPCION, MARCA, UNIDAD, EXISTENCIA, COSTO, COMPRADOR. Actualiza por clave solo las columnas que traiga.</p>
             ${S.puedeEditar() ? '<input type="file" id="fileArt" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para actualizar</button>'}<div id="lastArt" class="muted small"></div></section>
+          <section class="card"><div class="card-head"><h2>Sobrepedido y entregas directas · reemplazar</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
+            <p class="muted">Sube el archivo de carga (hoja <b>PEDIDOS</b>, con la columna <b>modulo</b>). Se dan de baja los renglones que ya están en esos dos módulos y se carga el archivo completo. Los tickets no se tocan.</p>
+            ${S.puedeEditar() ? '<input type="file" id="filePed" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para cargar</button>'}</section>
           <section class="card"><div class="card-head"><h2>Tickets · reporte</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
             <p class="muted">Sube el <b>REPORTE DE TICKETS</b> (hoja <b>BASE DE DATOS</b>). Se dan de baja los tickets que ya están en el portal y se carga el archivo completo. Si el archivo trae la hoja de categorías, también se actualizan los días de cotización.</p>
             ${S.puedeEditar() ? '<input type="file" id="fileTk" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para cargar</button>'}</section>
@@ -329,6 +380,7 @@
       const fIni = U.$('#fileIni', c); if (fIni) fIni.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaInicial(f); };
       const fArt = U.$('#fileArt', c); if (fArt) fArt.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaArticulos(f); };
       const fTk = U.$('#fileTk', c); if (fTk) fTk.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaTickets(f); };
+      const fPed = U.$('#filePed', c); if (fPed) fPed.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaPedidos(f); };
       U.$$('[data-entrar]', c).forEach((b) => b.onclick = () => APP.entrar('Para subir archivos al portal necesitas la contraseña.'));
       APP.filterBar(U.$('#bitFilters', c), [
         { k: 'usuario', label: 'Usuario', type: 'search', placeholder: 'Nombre' },
