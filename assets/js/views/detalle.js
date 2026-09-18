@@ -4,19 +4,28 @@
 
   /** Línea de tiempo de las 4 etapas del ticket */
   function etapasHTML(p) {
-    const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol);
+    const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol, S.cat.cats);
     const clase = (e) => e.estado === 'HECHA' ? (e.cumple ? 'et-ok' : 'et-mal') : e.estado === 'EN CURSO' ? (e.cumple ? 'et-curso' : 'et-tarde') : e.estado === 'INACTIVA' ? 'et-off' : 'et-pend';
-    const dias = (e) => e.dias === null ? '—' : `${e.dias} d`;
+    const dias = (e) => e.dias === null ? '—' : e.unidad === 'h' ? `${C.textoHoras(e.dias)} h` : `${e.dias} d`;
     const vig = t.vigente && t.venceEn !== null
-      ? (t.venceEn < 0 ? `<span class="warn-box">La cotización venció el ${U.fmtDate(t.vigente)} (hace ${-t.venceEn} días) sin respuesta del usuario: hay que recotizar.</span>`
+      ? (t.venceEn < 0 ? `<span class="warn-box">La cotización venció el ${U.fmtDate(t.vigente)} (hace ${-t.venceEn} días) sin autorización de compra: hay que recotizar.</span>`
         : `<div class="muted small">Cotización vigente hasta el ${U.fmtDate(t.vigente)} (${t.venceEn} día(s)).</div>`)
       : '';
+    const cls = (a) => a === 'FUERA DEL PLAZO' ? 'critical' : ['POR VENCER', 'VENCE HOY'].includes(a) ? 'warning' : ['FINALIZADO', 'EN TIEMPO'].includes(a) ? 'ok' : 'muted';
+    const alertas = `<div class="etapas-alertas">
+      <span class="badge badge-${cls(t.alertaCotizacion)}">Cotización: ${U.esc(t.alertaCotizacion)}</span>
+      <span class="badge badge-${cls(t.alertaCompra)}">Compra: ${U.esc(t.alertaCompra)}</span>
+      ${t.limite ? `<span class="muted small">Fecha límite de cotización: <b>${U.fmtDate(t.limite)}</b></span>` : ''}
+      ${t.diasFuera ? `<span class="badge badge-critical">${t.diasFuera} día(s) fuera de plazo</span>` : ''}
+      ${t.validacion !== 'OK' ? `<span class="muted small">${U.esc(t.validacion)}</span>` : ''}
+    </div>`;
     return `<div class="etapas">
-      <div class="etapas-row">${t.etapas.map((e) => `<div class="etapa ${clase(e)}" title="${U.esc(e.desc)} · ${U.esc(e.quien)}">
+      <div class="etapas-row etapas-6">${t.etapas.map((e) => `<div class="etapa ${clase(e)}" title="${U.esc(e.desc)} · ${U.esc(e.quien)}">
         <div class="et-n">${e.n}</div><div class="et-lb">${U.esc(e.label)}</div>
         <div class="et-d">${dias(e)}</div>
-        <div class="et-st">${e.estado === 'INACTIVA' ? 'Se activa si vence' : e.estado === 'HECHA' ? `meta ${e.meta} d` : e.estado.toLowerCase()}</div>
+        <div class="et-st">${e.estado === 'INACTIVA' ? 'Se activa si vence' : e.estado === 'HECHA' ? `meta ${e.meta}${e.unidad === 'h' ? ' h' : ' d'}` : e.estado.toLowerCase()}</div>
       </div>`).join('')}</div>
+      ${alertas}
       <div class="etapas-pie"><b>${U.esc(t.actual)}</b> · ${t.total === null ? '' : `${t.total} días hábiles desde que se levantó el ticket`}</div>
       ${vig}</div>`;
   }
@@ -87,7 +96,17 @@
           const ini = form.querySelector('[name="fecha_estimada_inicio"]'); if (ini && fe.inicio) ini.value = fe.inicio;
         }
       }
-      // Vencimiento de la cotización = fecha de respuesta + vigencia (días naturales)
+      // Fecha límite de cotización = fecha de solicitud + días hábiles de la categoría
+      if (esTicket && (k === 'categoria_ticket' || k === 'fecha_solicitud')) {
+        const cat = form.querySelector('[name="categoria_ticket"]'), lim = form.querySelector('[name="fecha_limite_cotizacion"]');
+        const dias = C.diasCategoria(cat ? cat.value : '', S.cat.cats);
+        if (lim && dias !== null) {
+          const base = form.querySelector('[name="fecha_solicitud"]');
+          const fs2 = U.iso(base ? base.value : p.fecha_solicitud);
+          if (fs2) { lim.value = U.addWorkdays(fs2, dias, S.hol); UI.toast(`Fecha límite de cotización: ${U.fmtDate(lim.value)} (${dias} días hábiles)`, 'info', 4000); }
+        }
+      }
+      // Vencimiento de la cotización = fecha de entrega + vigencia (días naturales)
       if (esTicket && ['fecha_cotizacion_usuario', 'vigencia_dias', 'fecha_recotizacion_usuario', 'vigencia_dias_2'].includes(k)) {
         const seg = k.endsWith('_2') || k === 'fecha_recotizacion_usuario';
         const fBase = form.querySelector(seg ? '[name="fecha_recotizacion_usuario"]' : '[name="fecha_cotizacion_usuario"]');
@@ -138,7 +157,7 @@
     const esTicket = p.modulo === 'TICKET';
     const camposFolio = S.fieldsFor(p.modulo).filter((f) => f.folio).map((f) => f.k);
     if (esTicket) {
-      const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol);
+      const t = p._etapas || C.etapasTicket(p, S.hoy, S.hol, S.cat.cats);
       const fs = [...U.$$('fieldset', form)].find((x) => U.norm(U.$('legend', x).textContent) === 'ETAPAS DEL TICKET');
       if (fs) {
         const nota = U.h(`<p class="muted small">Estos datos son del <b>ticket completo</b>: al guardar se aplican a las ${S.clavesDelFolio(p).length} clave(s) del folio.</p>`);

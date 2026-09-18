@@ -130,6 +130,144 @@
     } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
   }
 
+  /* -------- Reporte de tickets (v1.3.0): reemplaza los tickets del portal -------- */
+  const TK_MAP = {
+    folio_pedido: ['TICKET', 'FOLIO', 'NO. TICKET'],
+    solicitante: ['SOLICITANTE', 'AREA SOLICITANTE'],
+    clave: ['CLAVE'],
+    descripcion: ['DESCRIPCION', 'DESCRIPCIÓN'],
+    comprador: ['COMPRADOR'],
+    status_pedido: ['STATUS DEL TICKET', 'STATUS'],
+    categoria_ticket: ['CATEGORIA', 'CATEGORÍA'],
+    f_sol: ['FECHA DE SOLICITUD', 'FECHA SOLICITUD'],
+    h_sol: ['HORA DE SOLICITUD', 'HORA SOLICITUD'],
+    f_asig: ['FECHA ASIGNACION', 'FECHA DE ASIGNACION', 'FECHA ASIGNACIÓN'],
+    h_asig: ['HORA DE ASIGNACION', 'HORA ASIGNACION', 'HORA DE ASIGNACIÓN'],
+    fecha_limite_cotizacion: ['FECHA FINAL COTIZACION', 'FECHA FINAL COTIZACIÓN', 'FECHA LIMITE COTIZACION'],
+    fecha_cotizacion_usuario: ['FECHA ENTREGA COTIZACION', 'FECHA ENTREGA COTIZACIÓN'],
+    fecha_autorizacion_compra: ['FECHA AUTORIZACION COMPRA', 'FECHA AUTORIZACIÓN COMPRA'],
+    fecha_pago_proveedor: ['FECHA PAGO PROVEEDOR'],
+    tiempo_entrega: ['TIEMPO DE ENTREGA MANEJADO CUADRO C.', 'TIEMPO DE ENTREGA', 'TIEMPO DE ENTREGA MANEJADO'],
+    fecha_estimada: ['FECHA ESTIMADA DE LLEGADA COMPRA', 'FECHA ESTIMADA DE LLEGADA'],
+    fecha_real_llegada: ['FECHA REAL DE LLEGADA'],
+    comentarios: ['COMENTARIOS'],
+  };
+  // Compradores que en el reporte vienen escritos de varias formas
+  const TK_ALIAS = { 'JULISSA YAJAIRA MEZA': 'JULISSA YAHAIRA MEZA' };
+  // Solicitantes que son la misma área escrita distinto (confirmado con el área de compras)
+  const TK_AREA_ALIAS = { RH: 'RECURSOS HUMANOS', CALIDAD: 'CONTROL DE CALIDAD', ADMINISTRATIVO: 'ADMINISTRACION' };
+  const norm1 = (v) => U.blank(v) ? null : U.norm(String(v)).replace(/\s+/g, ' ');
+  /** Hora: el Excel la guarda como fracción del día (0.5 = 12:00) o como texto "13:25" */
+  function horaTexto(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') {
+      const min = Math.round(v * 24 * 60) % (24 * 60);
+      return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+    }
+    const m = String(v).match(/(\d{1,2}):(\d{2})/);
+    return m ? `${m[1].padStart(2, '0')}:${m[2]}` : null;
+  }
+  const conHora = (fecha, hora) => { const f = U.iso(fecha); if (!f) return null; const h = horaTexto(hora); return h ? `${f}T${h}:00` : f; };
+
+  async function cargaTickets(file) {
+    const ld = UI.loading('Leyendo el reporte de tickets…');
+    let wb, plan = null, cats = [];
+    try {
+      wb = await XL.readFile(file);
+      const hoja = wb.sheetNames.find((n) => /BASE DE DATOS|TICKETS?/i.test(n)) || wb.sheetNames[0];
+      const { rows } = XL.toObjects(await wb.rows(hoja));
+      const pick = (o, names) => { const k = Object.keys(o).find((x) => names.includes(U.norm(x).replace(/\s+/g, ' '))); return k ? o[k] : null; };
+      const avisos = { anios: 0, alias: 0, areas: 0, sinFecha: 0 };
+      const filas = rows.map((o) => {
+        const v = {}; for (const [k, names] of Object.entries(TK_MAP)) v[k] = pick(o, names);
+        if (U.blank(v.folio_pedido) && U.blank(v.descripcion)) return null;
+        const fs = conHora(v.f_sol, v.h_sol);
+        if (!fs) avisos.sinFecha++;
+        const anio = fs ? +fs.slice(0, 4) : null, mesN = fs ? +fs.slice(5, 7) : null;
+        const anioArchivo = pick(o, ['AÑO', 'ANIO', 'AÑO ']);
+        if (anio && anioArchivo && Number(anioArchivo) !== anio) avisos.anios++;
+        let comprador = norm1(v.comprador);
+        if (comprador && TK_ALIAS[comprador]) { comprador = TK_ALIAS[comprador]; avisos.alias++; }
+        let solicitante = norm1(v.solicitante);
+        if (solicitante && TK_AREA_ALIAS[solicitante]) { solicitante = TK_AREA_ALIAS[solicitante]; avisos.areas++; }
+        const te = v.tiempo_entrega;
+        const teNum = te !== null && te !== '' && !isNaN(te) ? Number(te) : null;
+        return {
+          modulo: 'TICKET', tipo_solicitud: 'TICKET',
+          folio_pedido: v.folio_pedido === null ? null : String(v.folio_pedido).trim(),
+          clave: norm1(v.clave) || 'NUEVO', descripcion: U.blank(v.descripcion) ? null : String(v.descripcion).trim(),
+          cantidad_solicitada: 1,
+          solicitante, comprador, area: solicitante,
+          categoria_ticket: norm1(v.categoria_ticket),
+          status_pedido: norm1(v.status_pedido) || 'PENDIENTE',
+          anio, mes: mesN ? U.MESES[mesN - 1] : null,
+          fecha_solicitud: fs, fecha_asignacion: conHora(v.f_asig, v.h_asig),
+          fecha_limite_cotizacion: U.isoEs(v.fecha_limite_cotizacion),
+          fecha_cotizacion_usuario: U.isoEs(v.fecha_cotizacion_usuario),
+          fecha_autorizacion_compra: U.isoEs(v.fecha_autorizacion_compra),
+          fecha_pago_proveedor: U.isoEs(v.fecha_pago_proveedor),
+          tiempo_entrega: teNum === null ? (U.blank(te) ? null : String(te).trim()) : `${teNum} DIAS HABILES`,
+          dias_fin: teNum, tipo_dias: teNum === null ? null : 'HABILES',
+          fecha_estimada: U.isoEs(v.fecha_estimada), fecha_estimada_manual: true,
+          fecha_real_llegada: U.isoEs(v.fecha_real_llegada),
+          comentarios: U.blank(v.comentarios) ? null : String(v.comentarios).trim(),
+          origen_hoja: hoja, activo: true,
+        };
+      }).filter(Boolean);
+      // Hoja de categorías (T.E. COTIZACIONES): días de cotización por categoría
+      const shCat = wb.sheetNames.find((n) => /COTIZACION/i.test(n));
+      if (shCat) {
+        const { rows: cr } = XL.toObjects(await wb.rows(shCat));
+        cats = cr.map((o) => {
+          const k = Object.keys(o);
+          const cat = o[k.find((x) => /CATEGOR/i.test(x))], d = o[k.find((x) => /DIAS|DÍAS/i.test(x))];
+          return U.blank(cat) ? null : { categoria: norm1(cat), dias: Number(d) || 3 };
+        }).filter(Boolean);
+      }
+      plan = { filas, avisos, hoja };
+    } catch (e) { UI.loading(false); UI.toast(`No se pudo leer el archivo: ${e.message}`, 'error'); return; }
+    UI.loading(false);
+    if (!plan.filas.length) { UI.toast('No encontré renglones de tickets en el archivo (se espera la hoja BASE DE DATOS con TICKET, SOLICITANTE, DESCRIPCION…)', 'error'); return; }
+
+    const actuales = S.pedidos.filter((p) => p.modulo === 'TICKET');
+    const folios = U.uniq(plan.filas.map((r) => r.folio_pedido)).length;
+    const body = `<p>Del archivo <b>${U.esc(file.name)}</b> (hoja ${U.esc(plan.hoja)}):</p>
+      <ul class="lista-check">
+        <li><b>${U.fmtNum(plan.filas.length)}</b> renglones · <b>${U.fmtNum(folios)}</b> tickets</li>
+        <li>Se darán de baja los <b>${U.fmtNum(actuales.length)}</b> renglones de tickets que hay hoy en el portal (quedan en “Ver dados de baja” y en la bitácora).</li>
+        ${cats.length ? `<li>Se actualizarán <b>${U.fmtNum(cats.length)}</b> categorías de cotización.</li>` : ''}
+        ${plan.avisos.alias ? `<li>${plan.avisos.alias} renglón(es) con el comprador escrito distinto se unifican (JULISSA YAJAIRA → JULISSA YAHAIRA MEZA).</li>` : ''}
+        ${plan.avisos.areas ? `<li>${plan.avisos.areas} renglón(es) con el solicitante escrito distinto se unifican (RH → RECURSOS HUMANOS, CALIDAD → CONTROL DE CALIDAD, ADMINISTRATIVO → ADMINISTRACION).</li>` : ''}
+        ${plan.avisos.anios ? `<li>${plan.avisos.anios} renglón(es) traían un AÑO que no coincide con la fecha de solicitud: se corrige con la fecha.</li>` : ''}
+        ${plan.avisos.sinFecha ? `<li class="error">${plan.avisos.sinFecha} renglón(es) sin fecha de solicitud.</li>` : ''}
+      </ul>
+      <p class="warn-box">Los sobrepedidos y las entregas directas no se tocan. Esta operación solo reemplaza los tickets.</p>`;
+    const m = UI.modal({ title: 'Reemplazar tickets con el reporte', body, footer: '<button class="btn btn-ghost" data-a="c">Cancelar</button><button class="btn btn-success" data-a="s">Dar de baja y cargar</button>' });
+    U.$('[data-a="c"]', m.el).onclick = m.close;
+    U.$('[data-a="s"]', m.el).onclick = async () => {
+      if (!APP.requiereEdicion()) return;
+      m.close();
+      const ld2 = UI.loading('Reemplazando tickets…');
+      try {
+        if (cats.length) {
+          ld2.text('Actualizando categorías de cotización…');
+          await API.upsert('sp_cat_categorias_ticket', cats.map((c) => ({ ...c, actualizado_por: S.user })), 'categoria');
+        }
+        if (actuales.length) {
+          ld2.text(`Dando de baja ${U.fmtNum(actuales.length)} tickets anteriores…`);
+          await S.updateMany(actuales.map((p) => p.id), { activo: false });
+        }
+        ld2.text('Cargando el reporte…');
+        const rows = plan.filas.map((r) => ({ ...r, creado_por: `REPORTE ${file.name}`.slice(0, 80), actualizado_por: S.user }));
+        await API.insert('sp_pedidos', rows, { returning: false, onProgress: (d, t) => ld2.progress(d, t, `Tickets ${U.fmtNum(d)} de ${U.fmtNum(t)}`) });
+        await API.insert('sp_cargas', [{ tipo: 'REPORTE_TICKETS', archivo: file.name, registros: rows.length, usuario: S.user }], { returning: false });
+        UI.toast(`Listo: ${U.fmtNum(rows.length)} renglones de tickets cargados (${U.fmtNum(folios)} tickets)`);
+        await APP.reload();
+        location.hash = '#/tickets';
+      } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
+    };
+  }
+
   /* -------- Descargas -------- */
   async function descargarBase() {
     const ld = UI.loading('Preparando Excel completo…');
@@ -179,6 +317,9 @@
           <section class="card"><div class="card-head"><h2>Actualizar maestro de artículos</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
             <p class="muted">Sube la exportación del sistema (hoja con <b>IDARTICULO</b> y <b>EXIUNIBAS</b>, como la pestaña “E”) o un archivo con CLAVE y COMPRADOR (asignación de compradores). También acepta CSV con CLAVE, DESCRIPCION, MARCA, UNIDAD, EXISTENCIA, COSTO, COMPRADOR. Actualiza por clave solo las columnas que traiga.</p>
             ${S.puedeEditar() ? '<input type="file" id="fileArt" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para actualizar</button>'}<div id="lastArt" class="muted small"></div></section>
+          <section class="card"><div class="card-head"><h2>Tickets · reporte</h2>${S.puedeEditar() ? '' : '<span class="pill pill-ro">🔒 Solo lectura</span>'}</div>
+            <p class="muted">Sube el <b>REPORTE DE TICKETS</b> (hoja <b>BASE DE DATOS</b>). Se dan de baja los tickets que ya están en el portal y se carga el archivo completo. Si el archivo trae la hoja de categorías, también se actualizan los días de cotización.</p>
+            ${S.puedeEditar() ? '<input type="file" id="fileTk" accept=".xlsx,.csv">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para cargar</button>'}</section>
           <section class="card"><div class="card-head"><h2>Carga inicial</h2></div>
             <p class="muted">Solo la primera vez: sube <b>carga_inicial.xlsx</b> (datos ya limpios del Google Sheet). Puedes elegir qué hojas subir.</p>
             ${S.puedeEditar() ? '<input type="file" id="fileIni" accept=".xlsx">' : '<button class="btn btn-primary btn-sm" data-entrar>🔒 Entrar para cargar</button>'}</section>
@@ -187,6 +328,7 @@
       U.$('#btnBase', c).onclick = descargarBase;
       const fIni = U.$('#fileIni', c); if (fIni) fIni.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaInicial(f); };
       const fArt = U.$('#fileArt', c); if (fArt) fArt.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaArticulos(f); };
+      const fTk = U.$('#fileTk', c); if (fTk) fTk.onchange = (e) => { const f = e.target.files[0]; e.target.value = ''; if (f) cargaTickets(f); };
       U.$$('[data-entrar]', c).forEach((b) => b.onclick = () => APP.entrar('Para subir archivos al portal necesitas la contraseña.'));
       APP.filterBar(U.$('#bitFilters', c), [
         { k: 'usuario', label: 'Usuario', type: 'search', placeholder: 'Nombre' },

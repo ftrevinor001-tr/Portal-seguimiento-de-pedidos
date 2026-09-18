@@ -11,6 +11,8 @@
       { k: 'solicitante', label: 'Solicitante', list: 'SOLICITANTE' }, { k: 'dia', label: 'Día que no recibe', opts: ['LUNES', 'MARTES', 'MIERCOLES', 'JUEVES', 'VIERNES', 'SABADO'] }] },
     inh: { label: 'Días inhábiles', help: 'Festivos y días sin operación. Se descuentan al calcular días hábiles y días de incumplimiento.', cols: [
       { k: 'fecha', label: 'Fecha', date: true }, { k: 'descripcion', label: 'Descripción', w: '260px' }] },
+    cats: { label: 'Categorías de tickets', help: 'Días hábiles para entregar la cotización al usuario según la categoría del ticket. Definen la fecha límite de cotización.', cols: [
+      { k: 'categoria', label: 'Categoría', w: '380px' }, { k: 'dias', label: 'Días de cotización', num: true }] },
     listas: { label: 'Listas desplegables', help: 'Valores sugeridos en capturas (compradores, áreas, solicitantes, proveedores…). Los valores que ya existen en los pedidos se agregan solos.', cols: [
       { k: 'lista', label: 'Lista', opts: ['COMPRADOR', 'AREA', 'SOLICITANTE', 'PROVEEDOR', 'MARCA', 'UNIDAD', 'TIPO_SOLICITUD', 'USUARIO'] }, { k: 'valor', label: 'Valor', w: '260px' },
       { k: 'modulo', label: 'Módulo (vacío = todos)', opts: ['SOBREPEDIDO', 'ENTREGA_DIRECTA', 'TICKET'] }] },
@@ -76,7 +78,7 @@
         row[el.dataset.k] = v;
       });
       if (st.tab === 'te' && row.tiempo_entrega && (row.dias_fin === null || row.dias_fin === undefined)) { const t = C.parseTiempoEntrega(row.tiempo_entrega); row.dias_inicio = t.ini; row.dias_fin = t.fin; if (t.tipo && !row.tipo_dias) row.tipo_dias = t.tipo; }
-      const req = { te: ['proveedor', 'solicitante'], td: ['proveedor'], dnr: ['solicitante', 'dia'], inh: ['fecha'], listas: ['lista', 'valor'] }[st.tab];
+      const req = { te: ['proveedor', 'solicitante'], td: ['proveedor'], dnr: ['solicitante', 'dia'], inh: ['fecha'], listas: ['lista', 'valor'], cats: ['categoria', 'dias'] }[st.tab];
       const falt = req.filter((k) => U.blank(row[k]));
       if (falt.length) { UI.toast(`Falta: ${falt.join(', ')}`, 'warn'); return; }
       if (!row.id) delete row.id;
