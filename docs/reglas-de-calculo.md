@@ -82,6 +82,16 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 
 Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (sin fórmula) y quedó con valores viejos: "TERMINADO" y "DENTRO DEL PLAZO", que ya no existen en la fórmula actual.
 
+## Reemplazo de datos por módulo (v1.3 y v1.4)
+En *Datos y bitácora* hay dos cargas que **reemplazan** lo que ya está en el portal, sin borrar nada de forma definitiva: los renglones anteriores se dan de baja (siguen en "Ver dados de baja" y en la bitácora) y se carga el archivo completo.
+
+| Carga | Qué reemplaza | Archivo |
+|---|---|---|
+| **Tickets · reporte** | Solo el módulo TICKET | Reporte de tickets (hoja BASE DE DATOS); si trae la hoja de categorías también actualiza los días de cotización |
+| **Sobrepedido y entregas directas · reemplazar** | Los módulos SOBREPEDIDO y ENTREGA_DIRECTA | Archivo de carga con hoja **PEDIDOS** y la columna **modulo** (`SOBREPEDIDO` / `ENTREGA_DIRECTA`) |
+
+La hoja PEDIDOS usa los nombres de campo del portal (clave, descripcion, comprador, fecha_solicitud, fecha_estimada, fecha_real_llegada…). Los campos calculados (ALERTA, días de incumplimiento, días naturales, INV, clasificación, % pago mínimo) no se cargan: el portal los recalcula.
+
 ## Fecha estimada (al capturar o editar)
 - **Días**: se toman del catálogo *Tiempos de entrega* (proveedor + solicitante) o del texto "DE 10 A 15 DIAS".
 - **Entrega directa y tickets**:
