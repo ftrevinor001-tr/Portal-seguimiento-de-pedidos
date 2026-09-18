@@ -159,79 +159,171 @@
     return est < hoy ? 'PEND_VENCIDA' : 'PEND_EN_PLAZO';
   };
 
-  /* ------------------ Etapas del TICKET (v1.2.0) ------------------ */
-  /* 1 Asignación: del ticket levantado a que el jefe de área asigna comprador.
-     2 Cotización: de la asignación a la respuesta al usuario con la cotización.
-     3 Recotización: INACTIVA; se activa solo si la cotización vence sin respuesta del usuario.
-     4 Entrega: de que el usuario acepta la cotización a que el artículo llega a SANVER.
-     Los tiempos se miden en días hábiles (L-V, sin días inhábiles) y la vigencia en días naturales. */
-  C.METAS_TICKET = () => Object.assign({ asignacion: 1, cotizacion: 2, recotizacion: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }, CFG().METAS_TICKET || {});
+  /* ------------------ Etapas del TICKET (v1.3.0) ------------------ */
+  /* Réplica del "REPORTE DE TICKETS 2026":
+     1 Asignación   solicitud (fecha+hora) → asignación (fecha+hora)   [horas]
+     2 Cotización   asignación → entrega de la cotización al usuario, contra la FECHA LÍMITE
+                    (= solicitud + los días hábiles de la categoría, catálogo T.E. COTIZACIONES)
+     3 Recotización INACTIVA; se activa si la cotización entregada vence sin autorización de compra
+     4 Autorización entrega de la cotización → autorización de compra (usuario)
+     5 Pago         autorización → pago al proveedor
+     6 Llegada      pago (o autorización) → llegada real, contra la fecha estimada de llegada   */
+  C.METAS_TICKET = () => Object.assign({
+    asignacion_horas: 24, cotizacion: 3, recotizacion: 2, autorizacion: 3, pago: 2, entrega: 15,
+    vigencia: 15, avisar_vence: 3,
+  }, CFG().METAS_TICKET || {});
   C.ETAPAS_TICKET = [
-    { k: 'asignacion', n: 1, label: 'Asignación', quien: 'Jefe de área', desc: 'Del ticket levantado a la asignación del comprador' },
-    { k: 'cotizacion', n: 2, label: 'Cotización', quien: 'Comprador', desc: 'De la asignación a la respuesta al usuario con la cotización' },
-    { k: 'recotizacion', n: 3, label: 'Recotización', quien: 'Comprador', desc: 'Solo si la cotización venció sin respuesta del usuario' },
-    { k: 'entrega', n: 4, label: 'Entrega', quien: 'Proveedor', desc: 'De la aceptación del usuario a la llegada a SANVER' },
+    { k: 'asignacion', n: 1, label: 'Asignación', quien: 'Jefe de área', desc: 'Del ticket levantado a la asignación del comprador', unidad: 'h' },
+    { k: 'cotizacion', n: 2, label: 'Cotización', quien: 'Comprador', desc: 'De la asignación a la entrega de la cotización al usuario', unidad: 'd' },
+    { k: 'recotizacion', n: 3, label: 'Recotización', quien: 'Comprador', desc: 'Solo si la cotización vence sin autorización del usuario', unidad: 'd' },
+    { k: 'autorizacion', n: 4, label: 'Autorización', quien: 'Usuario', desc: 'De la cotización entregada a la autorización de compra', unidad: 'd' },
+    { k: 'pago', n: 5, label: 'Pago', quien: 'Administración', desc: 'De la autorización de compra al pago del proveedor', unidad: 'd' },
+    { k: 'entrega', n: 6, label: 'Llegada', quien: 'Proveedor', desc: 'Del pago a la llegada del artículo a SANVER', unidad: 'd' },
   ];
   C.ETAPA_LABEL = Object.fromEntries(C.ETAPAS_TICKET.map((e) => [e.k, e.label]));
+  C.ETAPAS_FLUJO_TICKET = ['POR ASIGNAR', 'EN COTIZACIÓN', 'ESPERA DEL USUARIO', 'POR RECOTIZAR', 'POR PAGAR', 'EN SURTIMIENTO', 'ENTREGADO'];
+  C.ALERTAS_TICKET = ['EN TIEMPO', 'POR VENCER', 'VENCE HOY', 'FUERA DEL PLAZO', 'FINALIZADO', 'SIN FECHA LIMITE', 'SIN AUTORIZACION DE COMPRA', 'SIN FECHA ESTIMADA', 'CANCELADO'];
+
   /** Días hábiles transcurridos entre dos fechas (mismo día = 0) */
   C.diasHabiles = (a, b, hol) => (!a || !b) ? null : Math.max(0, U.networkdays(a, b, hol) - 1);
-  /** Vencimiento de una cotización: el capturado o fecha + vigencia (días naturales) */
+  /** Horas transcurridas entre solicitud y asignación (como la fórmula del reporte) */
+  C.tiempoAsignacionHoras = function (p) {
+    const a = U.isoDateTime(p.fecha_solicitud), b = U.isoDateTime(p.fecha_asignacion);
+    if (!a || !b) return null;
+    return (new Date(b.replace(' ', 'T')) - new Date(a.replace(' ', 'T'))) / 3600000;
+  };
+  C.textoHoras = function (h) {
+    if (h === null || h === undefined || isNaN(h)) return '';
+    const neg = h < 0, t = Math.abs(h), hh = Math.floor(t), mm = Math.round((t - hh) * 60);
+    return `${neg ? '-' : ''}${mm === 60 ? hh + 1 : hh}:${String(mm === 60 ? 0 : mm).padStart(2, '0')}`;
+  };
+  /** VALIDACION TIEMPO del reporte */
+  C.validacionTiempo = function (p) {
+    const h = C.tiempoAsignacionHoras(p);
+    if (h === null) return 'PENDIENTE DE ASIGNACION';
+    return h < 0 ? 'REVISAR FECHA/HORA' : 'OK';
+  };
+  /** Días de cotización de una categoría (catálogo T.E. COTIZACIONES) */
+  C.diasCategoria = function (categoria, cats) {
+    const c = up(categoria);
+    if (!c || !cats) return null;
+    const hit = (cats || []).find((x) => up(x.categoria) === c && x.activo !== false);
+    return hit ? Number(hit.dias) : null;
+  };
+  /** FECHA FINAL COTIZACIÓN = fecha de solicitud + días hábiles de la categoría */
+  C.fechaLimiteCotizacion = function (p, cats, hol) {
+    const cap = U.iso(p.fecha_limite_cotizacion); if (cap) return cap;
+    const fs = U.iso(p.fecha_solicitud); if (!fs) return null;
+    const d = C.diasCategoria(p.categoria_ticket, cats);
+    return d === null || isNaN(d) ? null : U.addWorkdays(fs, d, hol);
+  };
+  /** ALERTA COTIZACION (misma lógica del Excel) */
+  C.alertaCotizacionTicket = function (p, hoy, cats, hol) {
+    if (C.cancelado(p)) return 'CANCELADO';
+    const lim = C.fechaLimiteCotizacion(p, cats, hol);
+    if (!lim) return 'SIN FECHA LIMITE';
+    const ent = U.iso(p.fecha_cotizacion_usuario);
+    if (ent) return ent > lim ? 'FUERA DEL PLAZO' : 'FINALIZADO';
+    if (hoy > lim) return 'FUERA DEL PLAZO';
+    if (hoy === lim) return 'VENCE HOY';
+    return U.diffDays(lim, hoy) === 1 ? 'POR VENCER' : 'EN TIEMPO';
+  };
+  /** ALERTA COMPRA (misma lógica del Excel) */
+  C.alertaCompraTicket = function (p, hoy) {
+    if (C.cancelado(p)) return 'CANCELADO';
+    if (!U.iso(p.fecha_autorizacion_compra)) return 'SIN AUTORIZACION DE COMPRA';
+    const est = U.iso(p.fecha_estimada);
+    if (!est) return 'SIN FECHA ESTIMADA';
+    const real = U.iso(p.fecha_real_llegada);
+    if (real) return real > est ? 'FUERA DEL PLAZO' : 'FINALIZADO';
+    if (hoy > est) return 'FUERA DEL PLAZO';
+    if (hoy === est) return 'VENCE HOY';
+    return U.diffDays(est, hoy) === 1 ? 'POR VENCER' : 'EN TIEMPO';
+  };
+  /** DÍAS FUERA DE PLAZO (naturales, contra la fecha estimada de llegada) */
+  C.diasFueraPlazoTicket = function (p, hoy) {
+    const est = U.iso(p.fecha_estimada); if (!est) return null;
+    const real = U.iso(p.fecha_real_llegada);
+    return Math.max(0, U.diffDays(real || hoy, est));
+  };
+  /**
+   * Vencimiento de la cotización entregada (vigencia en días naturales).
+   * Solo aplica si se capturó la vigencia o la fecha de vencimiento: sin ese dato el ticket
+   * no "vence" solo (así los tickets históricos no se marcan como POR RECOTIZAR).
+   */
   C.venceCotizacion = function (fecha, dias, capturado) {
     const cap = U.iso(capturado); if (cap) return cap;
     const f = U.iso(fecha); if (!f) return null;
-    const d = dias === null || dias === undefined || dias === '' ? C.METAS_TICKET().vigencia : Number(dias);
-    return isNaN(d) ? null : U.addDays(f, d);
+    if (dias === null || dias === undefined || dias === '' || isNaN(dias)) return null;
+    return U.addDays(f, Number(dias));
   };
   /**
-   * Devuelve { etapas:[{k,label,ini,fin,dias,meta,estado,cumple}], actual, vence, vence2, venceEn, recotizaActiva, total }
-   * estado: HECHA | EN CURSO | PENDIENTE | INACTIVA | CANCELADA
+   * Etapas del ticket. Devuelve { etapas, actual, alertaCotizacion, alertaCompra, limite, vence, venceEn,
+   * recotizaActiva, horasAsignacion, diasFuera, validacion, total }
    */
-  C.etapasTicket = function (p, hoy, hol) {
+  C.etapasTicket = function (p, hoy, hol, cats) {
     const metas = C.METAS_TICKET();
-    const solicitud = U.iso(p.fecha_solicitud), asign = U.iso(p.fecha_asignacion), cot = U.iso(p.fecha_cotizacion_usuario);
-    const acept = U.iso(p.fecha_aceptacion_usuario), recot = U.iso(p.fecha_recotizacion_usuario), llegada = U.iso(p.fecha_real_llegada);
+    const solicitud = U.iso(p.fecha_solicitud), asign = U.iso(p.fecha_asignacion);
+    const cot = U.iso(p.fecha_cotizacion_usuario), recot = U.iso(p.fecha_recotizacion_usuario);
+    const aut = U.iso(p.fecha_autorizacion_compra), pago = U.iso(p.fecha_pago_proveedor);
+    const llegada = U.iso(p.fecha_real_llegada), est = U.iso(p.fecha_estimada);
+    const limite = C.fechaLimiteCotizacion(p, cats, hol);
     const vence = cot ? C.venceCotizacion(cot, p.vigencia_dias, p.fecha_vence_cotizacion) : null;
     const vence2 = recot ? C.venceCotizacion(recot, p.vigencia_dias_2, p.fecha_vence_cotizacion_2) : null;
     const cancelado = C.cancelado(p);
-    // La etapa 3 se activa solo si la cotización venció sin que el usuario aceptara
-    const recotizaActiva = !acept && !!vence && (vence < hoy || !!recot);
+    // La etapa 3 solo se activa si la cotización venció sin autorización de compra
+    const recotizaActiva = !aut && !!vence && (vence < hoy || !!recot);
+    const metaCot = C.diasCategoria(p.categoria_ticket, cats) ?? metas.cotizacion;
+    const horas = C.tiempoAsignacionHoras(p);
     const tramos = [
-      { k: 'asignacion', ini: solicitud, fin: asign, activa: true },
-      { k: 'cotizacion', ini: asign, fin: cot, activa: !!asign },
-      { k: 'recotizacion', ini: recotizaActiva ? vence : null, fin: recot, activa: recotizaActiva },
-      { k: 'entrega', ini: acept, fin: llegada, activa: !!acept },
+      { k: 'asignacion', ini: solicitud, fin: asign, horas: true, meta: metas.asignacion_horas },
+      { k: 'cotizacion', ini: asign || solicitud, fin: cot, meta: metaCot },
+      { k: 'recotizacion', ini: recotizaActiva ? vence : null, fin: recot, meta: metas.recotizacion },
+      { k: 'autorizacion', ini: recot || cot, fin: aut, meta: metas.autorizacion },
+      { k: 'pago', ini: aut, fin: pago, meta: metas.pago },
+      { k: 'entrega', ini: pago || aut, fin: llegada, meta: metas.entrega },
     ];
     const etapas = tramos.map((t) => {
       const def = C.ETAPAS_TICKET.find((e) => e.k === t.k);
-      const meta = metas[t.k];
       let estado, dias = null;
       if (cancelado && !t.fin) estado = 'CANCELADA';
-      else if (t.fin && t.ini) { estado = 'HECHA'; dias = C.diasHabiles(t.ini, t.fin, hol); }
-      else if (t.ini) { estado = 'EN CURSO'; dias = C.diasHabiles(t.ini, hoy, hol); }
+      else if (t.fin && t.ini) { estado = 'HECHA'; dias = t.horas ? horas : C.diasHabiles(t.ini, t.fin, hol); }
+      else if (t.ini) {
+        estado = 'EN CURSO';
+        dias = t.horas ? Math.max(0, (Date.now() - new Date(String(U.isoDateTime(p.fecha_solicitud) || t.ini).replace(' ', 'T'))) / 3600000) : C.diasHabiles(t.ini, hoy, hol);
+      }
       else estado = t.k === 'recotizacion' && !recotizaActiva ? 'INACTIVA' : 'PENDIENTE';
-      const cumple = dias === null ? null : dias <= meta;
-      return { ...def, ini: t.ini, fin: t.fin, dias, meta, estado, cumple, enCurso: estado === 'EN CURSO' };
+      const cumple = dias === null ? null : dias <= t.meta;
+      return { ...def, ini: t.ini, fin: t.fin, dias, meta: t.meta, estado, cumple, enCurso: estado === 'EN CURSO' };
     });
     let actual;
     if (cancelado) actual = 'CANCELADO';
     else if (llegada) actual = 'ENTREGADO';
-    else if (acept) actual = 'EN SURTIMIENTO';
-    else if (recot) actual = vence2 && vence2 < hoy ? 'POR RECOTIZAR' : 'ESPERA DEL USUARIO';
-    else if (recotizaActiva) actual = 'POR RECOTIZAR';
-    else if (cot) actual = 'ESPERA DEL USUARIO';
+    else if (pago) actual = 'EN SURTIMIENTO';
+    else if (aut) actual = 'POR PAGAR';
+    else if (recotizaActiva && !recot) actual = 'POR RECOTIZAR';
+    else if (recot || cot) actual = 'ESPERA DEL USUARIO';
     else if (asign) actual = 'EN COTIZACIÓN';
     else actual = 'POR ASIGNAR';
     const vig = recot ? vence2 : vence;
-    const venceEn = vig && !acept && !llegada && !cancelado ? U.diffDays(vig, hoy) : null;  // negativo = ya venció
+    const venceEn = vig && !aut && !llegada && !cancelado ? U.diffDays(vig, hoy) : null;
     const hechas = etapas.filter((e) => e.estado === 'HECHA');
-    const total = C.diasHabiles(solicitud, llegada || hoy, hol);
-    return { etapas, actual, vence, vence2, vigente: vig, venceEn, recotizaActiva, total, dias: Object.fromEntries(etapas.map((e) => [e.k, e.dias])), cumpleTodas: hechas.length ? hechas.every((e) => e.cumple) : null };
+    return {
+      etapas, actual, limite, vence, vence2, vigente: vig, venceEn, recotizaActiva,
+      alertaCotizacion: C.alertaCotizacionTicket(p, hoy, cats, hol),
+      alertaCompra: C.alertaCompraTicket(p, hoy),
+      horasAsignacion: horas, validacion: C.validacionTiempo(p),
+      diasFuera: C.diasFueraPlazoTicket(p, hoy), estimada: est,
+      total: C.diasHabiles(solicitud, llegada || hoy, hol),
+      dias: Object.fromEntries(etapas.map((e) => [e.k, e.dias])),
+      cumpleTodas: hechas.length ? hechas.every((e) => e.cumple) : null,
+    };
   };
-  /** true si el ticket necesita recotizarse (venció y el usuario no respondió) */
-  C.requiereRecotizar = (p, hoy, hol) => p.modulo === 'TICKET' && C.etapasTicket(p, hoy, hol).actual === 'POR RECOTIZAR';
+  /** true si el ticket necesita recotizarse (venció y el usuario no autorizó) */
+  C.requiereRecotizar = (p, hoy, hol, cats) => p.modulo === 'TICKET' && C.etapasTicket(p, hoy, hol, cats).actual === 'POR RECOTIZAR';
 
   /** Agrega los campos calculados (prefijo _) a un pedido */
-  C.enriquecer = function (p, hoy, hol) {
+  C.enriquecer = function (p, hoy, hol, cats) {
     p._alerta = C.alerta(p, hoy);
     p._incumplimiento = C.diasIncumplimiento(p, hoy, hol);
     p._dias_naturales = C.diasNaturales(p);
@@ -244,10 +336,14 @@
     p._costo_total = C.costoTotal(p);
     p._cumplimiento = C.cumplimiento(p, hoy);
     if (p.modulo === 'TICKET') {
-      const t = C.etapasTicket(p, hoy, hol);
+      const t = C.etapasTicket(p, hoy, hol, cats);
       p._etapas = t; p._etapa = t.actual; p._vence_en = t.venceEn;
+      p._alerta_cotizacion = t.alertaCotizacion; p._alerta_compra = t.alertaCompra;
+      p._horas_asignacion = t.horasAsignacion; p._validacion_tiempo = t.validacion;
+      p._dias_fuera_plazo = t.diasFuera; p._limite_cotizacion = t.limite;
       p._dias_asignacion = t.dias.asignacion; p._dias_cotizacion = t.dias.cotizacion;
-      p._dias_recotizacion = t.dias.recotizacion; p._dias_etapa_entrega = t.dias.entrega;
+      p._dias_recotizacion = t.dias.recotizacion; p._dias_autorizacion = t.dias.autorizacion;
+      p._dias_pago = t.dias.pago; p._dias_etapa_entrega = t.dias.entrega;
     }
     return p;
   };

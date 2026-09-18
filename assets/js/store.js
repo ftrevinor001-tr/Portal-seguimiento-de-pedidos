@@ -3,7 +3,7 @@
   const S = {
     pedidos: [],        // activos (vista sp_v_pedidos) + calculados
     bajas: null,        // dados de baja (se cargan bajo demanda)
-    cat: { te: [], td: [], dnr: [], inh: [], listas: [] },
+    cat: { te: [], td: [], dnr: [], inh: [], listas: [], cats: [] },
     hol: new Set(),
     hoy: U.today(),
     user: null,
@@ -94,16 +94,19 @@
     { k: 'tipo_directo', label: 'Tipo directo', type: 'text', mods: EDT, sec: 'Tiempos de entrega' },
     { k: 'alerta_id_oc', label: 'Alerta ID (OC)', type: 'select', list: 'ALERTA_OC', mods: EDT, sec: 'Tiempos de entrega' },
 
-    // Etapas del ticket (v1.2.0). Se capturan por folio: al guardar se aplican a todas las claves del ticket.
-    { k: 'fecha_asignacion', label: 'Fecha de asignación del ticket', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    // Etapas del ticket (v1.3.0 — REPORTE DE TICKETS). Se capturan por folio: al guardar se aplican a todas las claves del ticket.
+    { k: 'fecha_asignacion', label: 'Fecha y hora de asignación', type: 'datetime', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'asignado_por', label: 'Asignado por (jefe de área)', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'fecha_cotizacion_usuario', label: 'Respuesta al usuario con cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'categoria_ticket', label: 'Categoría de la cotización', type: 'select', list: 'CATEGORIA', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_limite_cotizacion', label: 'Fecha límite de cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_cotizacion_usuario', label: 'Fecha de entrega de la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'vigencia_dias', label: 'Vigencia de la cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'fecha_vence_cotizacion', label: 'Vence la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'fecha_aceptacion_usuario', label: 'El usuario acepta la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'fecha_recotizacion_usuario', label: 'Respuesta al usuario con la RE-cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
+    { k: 'fecha_recotizacion_usuario', label: 'Entrega de la RE-cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
     { k: 'vigencia_dias_2', label: 'Vigencia de la re-cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
     { k: 'fecha_vence_cotizacion_2', label: 'Vence la re-cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true, etapa2: true },
+    { k: 'fecha_autorizacion_compra', label: 'Fecha de autorización de compra', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_pago_proveedor', label: 'Fecha de pago al proveedor', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'nota_etapas', label: 'Nota de seguimiento del ticket', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
 
     { k: 'folio_factura', label: 'Folio de factura', type: 'text', mods: ED, sec: 'Facturación' },
@@ -152,6 +155,7 @@
   };
   S.lista = function (name, modulo) {
     if (name === 'STATUS') return modulo ? C.STATUS[modulo] : U.uniq([...C.STATUS.SOBREPEDIDO, ...C.STATUS.ENTREGA_DIRECTA]);
+    if (name === 'CATEGORIA') return U.sortEs(U.uniq([...S.categorias(), ...S.pedidos.filter((p) => p.categoria_ticket).map((p) => p.categoria_ticket)]));
     if (FIXED[name]) return FIXED[name];
     const vals = new Set();
     for (const l of S.cat.listas) if (l.activo !== false && l.lista === name && (!modulo || !l.modulo || l.modulo === modulo)) vals.add(l.valor);
@@ -166,18 +170,20 @@
   S.usuarios = () => U.sortEs(U.uniq([...S.lista('COMPRADOR'), ...S.lista('USUARIO')]));
 
   /* ------------------ Carga de datos ------------------ */
-  S.enrich = (p) => C.enriquecer(p, S.hoy, S.hol);
+  S.enrich = (p) => C.enriquecer(p, S.hoy, S.hol, S.cat.cats);
   S.refreshHol = () => { S.hol = new Set(S.cat.inh.filter((r) => r.activo !== false).map((r) => U.iso(r.fecha))); };
 
   S.loadCatalogos = async function () {
-    const [te, td, dnr, inh, listas] = await Promise.all([
+    const [te, td, dnr, inh, listas, cats] = await Promise.all([
       API.selectAll('sp_cat_tiempo_entrega', { order: 'proveedor,solicitante,id' }),
       API.selectAll('sp_cat_tiempo_descarga', { order: 'proveedor,id' }),
       API.selectAll('sp_cat_dias_no_recepcion', { order: 'solicitante,id' }),
       API.selectAll('sp_cat_dias_inhabiles', { order: 'fecha' }),
       API.selectAll('sp_cat_listas', { order: 'lista,valor' }),
+      // Categorías de cotización de tickets (v1.3.0). Si falta la tabla, la app sigue funcionando.
+      API.selectAll('sp_cat_categorias_ticket', { order: 'categoria' }).catch(() => { S.sinCategorias = true; return []; }),
     ]);
-    Object.assign(S.cat, { te, td, dnr, inh, listas });
+    Object.assign(S.cat, { te, td, dnr, inh, listas, cats });
     S.refreshHol();
   };
   S.loadAll = async function (onProgress) {
@@ -294,7 +300,9 @@
   S.bitacoraDe = (id) => API.select('sp_bitacora', { filters: [['tabla', 'eq', 'sp_pedidos'], ['registro_id', 'eq', id]], order: 'fecha.desc,id.desc', limit: 500 });
 
   /* Catálogos */
-  S.CAT_TABLES = { te: 'sp_cat_tiempo_entrega', td: 'sp_cat_tiempo_descarga', dnr: 'sp_cat_dias_no_recepcion', inh: 'sp_cat_dias_inhabiles', listas: 'sp_cat_listas' };
+  S.CAT_TABLES = { te: 'sp_cat_tiempo_entrega', td: 'sp_cat_tiempo_descarga', dnr: 'sp_cat_dias_no_recepcion', inh: 'sp_cat_dias_inhabiles', listas: 'sp_cat_listas', cats: 'sp_cat_categorias_ticket' };
+  /** Categorías de cotización activas (para los desplegables) */
+  S.categorias = () => (S.cat.cats || []).filter((c) => c.activo !== false).map((c) => c.categoria).sort((a, b) => a.localeCompare(b, 'es'));
   S.saveCat = async function (key, row) {
     requireUser();
     const table = S.CAT_TABLES[key];

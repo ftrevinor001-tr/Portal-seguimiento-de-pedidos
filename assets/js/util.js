@@ -18,6 +18,19 @@
     if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
     return null;
   };
+  /** Fecha escrita a mano: "22 DE AGOSTO 26", "5 de enero 2026", "22-ago-2026" -> ISO. null si no se entiende. */
+  U.isoEs = function (v) {
+    const d = U.iso(v); if (d) return d;
+    if (v === null || v === undefined) return null;
+    const s = U.norm(String(v));
+    const m = s.match(/(\d{1,2})\s*(?:DE\s+|[-\/ ])\s*([A-Z]+)\.?\s*(?:DE\s+)?(\d{2,4})?/);
+    if (!m) return null;
+    const i = U.MESES.findIndex((x) => x.startsWith(m[2].slice(0, 3)));
+    if (i < 0) return null;
+    let y = m[3] ? Number(m[3]) : new Date().getFullYear();
+    if (y < 100) y += 2000;
+    return `${y}-${pad(i + 1)}-${pad(Number(m[1]))}`;
+  };
   /** 'AAAA-MM-DDTHH:MM:SS' conservando hora si existe */
   U.isoDateTime = function (v) {
     if (v === null || v === undefined || v === '') return null;
