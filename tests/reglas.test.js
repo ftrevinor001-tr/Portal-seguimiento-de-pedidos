@@ -44,7 +44,7 @@ const eq = (name, got, exp) => { checks++; const ok = JSON.stringify(got) === JS
   const ed = P.filter((p) => p.modulo === 'ENTREGA_DIRECTA');
   const mes = ed.filter((p) => C.traslapaMes(p, 2026, 9));
   const pantalla = { 1: [0, 0, 0], 2: [0, 0, 0], 3: [3, 2, 6], 4: [3, 2, 6], 5: [4, 2, 8], 7: [5, 3, 9], 8: [11, 4, 25], 9: [11, 4, 25], 10: [16, 6, 37], 11: [20, 7, 55], 12: [20, 6, 57.5], 14: [23, 4, 73], 15: [28, 7, 84.5], 16: [27, 7, 82.5], 17: [26, 6, 70.5], 18: [24, 3, 67.5], 19: [24, 3, 63], 21: [22, 3, 56], 22: [18, 2, 48], 23: [14, 2, 38.5], 24: [12, 2, 33], 25: [10, 2, 29], 26: [9, 2, 27], 28: [9, 2, 27], 29: [9, 2, 27], 30: [6, 2, 19.5] };
-  console.log('\n2) Calendario sept-2026 (folios, proveedores, horas) vs pantalla anterior');
+  console.log('\n2) Calendario sept-2026 · criterio anterior (ventana) vs pantalla de Sheets');
   let dOk = 0;
   for (const [d, exp] of Object.entries(pantalla)) {
     const iso = `2026-09-${String(d).padStart(2, '0')}`;
@@ -59,6 +59,23 @@ const eq = (name, got, exp) => { checks++; const ok = JSON.stringify(got) === JS
   console.log('   KPIs del mes:', { folios: hm.size, horas: [...hm.values()].reduce((a, b) => a + b, 0), proveedores: new Set(noC.map(C.proveedorDe)).size, pctEntregas: (100 * noC.filter((p) => p.fecha_real_llegada).length / noC.length).toFixed(1) });
   eq('Folios programados', hm.size, 107); eq('Horas mensuales', [...hm.values()].reduce((a, b) => a + b, 0), 237);
   eq('% de entregas', (100 * noC.filter((p) => p.fecha_real_llegada).length / noC.length).toFixed(1), '68.8');
+
+  // 2b) Criterio vigente (v1.5.1): la clave se cuenta el día de su fecha estimada de llegada
+  const mesLlega = ed.filter((p) => C.llegaEnMes(p, 2026, 9));
+  const dia24 = mesLlega.filter((p) => C.llegaEnDia(p, '2026-09-24'));
+  const h24 = C.horasFolios(dia24);
+  console.log('\n2b) Criterio vigente · 24/09/2026:', { claves: dia24.length, folios: h24.size, horas: [...h24.values()].reduce((a, b) => a + b, 0) });
+  eq('solo claves con fecha estimada del día', dia24.every((p) => U.iso(p.fecha_estimada) === '2026-09-24'), true);
+  eq('ninguna clave con ventana que solo pasa por el día', dia24.some((p) => U.iso(p.fecha_estimada) !== '2026-09-24'), false);
+  eq('no incluye entregadas ni canceladas', dia24.some((p) => p.fecha_real_llegada || C.cancelado(p)), false);
+  const totalMes = U.uniq(mesLlega.map((p) => U.iso(p.fecha_estimada))).reduce((n, d) => n + ed.filter((p) => C.llegaEnDia(p, d)).length, 0);
+  eq('cada clave pendiente del mes se cuenta una sola vez', totalMes, mesLlega.filter((p) => !C.cancelado(p) && !U.iso(p.fecha_real_llegada)).length);
+  // Atrasadas: siguen en su día, con fecha estimada vencida y sin fecha real
+  const HOY_CAL = '2026-09-19';
+  const atrasadasMes = mesLlega.filter((p) => !C.cancelado(p) && !U.iso(p.fecha_real_llegada) && U.iso(p.fecha_estimada) < HOY_CAL);
+  eq('las atrasadas se quedan en su día', atrasadasMes.every((p) => C.llegaEnDia(p, U.iso(p.fecha_estimada))), true);
+  eq('ninguna atrasada tiene fecha real', atrasadasMes.some((p) => U.iso(p.fecha_real_llegada)), false);
+  eq('todas las atrasadas están fuera del plazo', atrasadasMes.every((p) => C.alerta(p, HOY_CAL) === 'FUERA DEL PLAZO'), true);
 
   // 3) Compradores: ENTREGA DIRECTA sept-2026
   const rc = C.resumenCumplimiento(P.filter((p) => p.tipo_solicitud === 'ENTREGA DIRECTA' && C.traslapaMes(p, 2026, 9)));
