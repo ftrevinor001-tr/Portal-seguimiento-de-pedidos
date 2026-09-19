@@ -311,7 +311,7 @@
         await API.insert('sp_cargas', [{ tipo: 'REEMPLAZO_PEDIDOS', archivo: file.name, registros: rows.length, usuario: S.user }], { returning: false });
         UI.toast(`Listo: ${U.fmtNum(rows.length)} renglones cargados`);
         await APP.reload();
-        location.hash = '#/seguimiento';
+        location.hash = '#/sobrepedido';
       } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
     };
   }

@@ -149,7 +149,7 @@
       U.$$('[data-etapa]', root).forEach((b) => b.onclick = () => { st.etapa = st.etapa === b.dataset.etapa ? '' : b.dataset.etapa; filtros(); draw(); });
       U.$('#tkEtapas', root).innerHTML = resumenEtapas(rows);
     }
-    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'f_sol', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.', alto: true, cls: 'lock-first' });
+    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'f_sol', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.', alto: true, cls: 'lock-first compact' });
   }
 
   function filtros() {
@@ -213,12 +213,11 @@
     render(c) {
       root = c; table = null;
       c.classList.add('vista-fija');
-      c.innerHTML = `<section class="card card-hero">
+      c.innerHTML = `<section class="card card-filtros" id="tkFiltrosCard">
           <div class="card-head compacta"><h2>Tickets por etapa</h2>
             <div class="head-actions"><button class="btn btn-ghost btn-sm" id="tkXls">⭳ Descargar Excel</button>${S.puedeEditar() ? '<button class="btn btn-primary btn-sm" id="tkNuevo">＋ Nuevo ticket</button>' : ''}</div>
           </div>
-        </section>
-        <section class="card card-filtros" id="tkFiltrosCard"><div id="tkFilters"></div></section>
+          <div id="tkFilters"></div></section>
         <section class="card card-resumen"><div class="resumen-toggle"><b>Resumen</b><span class="muted small" id="tkResumenMini"></span><button class="btn btn-light btn-sm" id="tkVerResumen">Ver resumen ▾</button></div>
           <div id="tkResumen" hidden>
             <p class="muted small">Etapas: <b>1 Asignación</b> (horas del jefe de área) · <b>2 Cotización</b> (contra la fecha límite de la categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
