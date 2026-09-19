@@ -107,13 +107,14 @@ La hoja PEDIDOS usa los nombres de campo del portal (clave, descripcion, comprad
 - **Sobrepedido y pedido especial**: fecha estimada de llegada = solicitud + días B en **días hábiles** (L-V, sin días inhábiles).
 - **Fecha manual**: si alguien escribe la fecha a mano queda marcada como "manual" y ya no se recalcula.
 
-## Calendario de Entregas Directas
-- **Claves del día**: cuentan en un día si la ventana [fecha estimada inicio, fecha estimada fin] incluye ese día, no están canceladas y aún no tienen fecha real de llegada.
-- **Horas por folio**: tiempo de descarga del folio. Las horas del día son la suma de los folios.
+## Calendario de Entregas Directas (v1.5.1)
+- **Claves del día**: las que tienen **fecha estimada de llegada ese día**, no están canceladas y aún no tienen fecha real. Cada folio se cuenta una sola vez, el día en que debe llegar.
+- Antes (v1.0 a v1.5.0) la clave aparecía en **todos** los días de su ventana (fecha estimada inicio → fin), que es como lo hacía la hoja de Sheets. Eso repetía el mismo folio en muchos días e inflaba las horas: un folio con ventana de tres semanas sumaba sus horas en cada uno de esos días.
+- **Horas por folio**: tiempo de descarga del folio. Las horas del día son la suma de sus folios.
 - **Nivel de carga**: Sin carga (0 h) · Baja (< 4 h) · Media (4 a 7.9 h) · Alta (≥ 8 h). Los umbrales se ajustan en `config.js`.
-- **KPIs del mes**:
-  - Folios y horas: todos los folios cuya ventana toca el mes.
-  - % de entregas: claves con fecha real / claves no canceladas.
+- **KPIs del mes**: folios y horas de las claves cuya fecha estimada de llegada cae en el mes; % de entregas = claves con fecha real / claves no canceladas.
+- **Atrasadas (v1.5.2)**: las claves cuya fecha estimada ya pasó y siguen sin fecha real se quedan en su día y el día se marca en rojo con "⚠ N atrasadas". El detalle del día las lista con la etiqueta ATRASADA y los días hábiles de retraso. Hay dos KPIs, *Atrasadas del mes* y *Atrasadas de meses anteriores*, y el filtro **Ver → Solo días con atrasos**. Como la captura de la fecha real no es diaria, esto sirve para perseguirlas sin sacarlas de su fecha programada.
+- En el detalle del día cada renglón muestra la llegada estimada y, si el catálogo dio un rango, desde qué día se esperaba.
 
 ## Reporte Compradores
 - **Qué claves entran**: las del tipo de solicitud elegido cuya ventana de fecha estimada toca el mes.
@@ -129,7 +130,7 @@ La hoja PEDIDOS usa los nombres de campo del portal (clave, descripcion, comprad
 | ALERTA vs fórmula del Excel (SOBREPEDIDO filas ≥906 y BASE PRINCIPAL filas ≥956) | 100% (5,784 filas) |
 | Existencia, % pago mínimo | 100% |
 | Estatus de facturación, clasificación, días naturales (Sobrepedido) | 99.5% – 99.8% (las diferencias vienen de fechas corregidas en la limpieza y de filas sin fórmula) |
-| Calendario sept-2026: folios, proveedores y horas por día vs pantalla anterior | 26 de 26 días idénticos |
+| Calendario sept-2026 con el criterio anterior (ventana): folios, proveedores y horas por día vs pantalla de Sheets | 26 de 26 días idénticos |
 | KPIs del calendario: 107 folios, 237 h, 68.8% de entregas | Idénticos |
 | Compradores ENTREGA DIRECTA sept-2026: 251 dentro, 0 fuera, 0 vencidas | Idéntico |
 
