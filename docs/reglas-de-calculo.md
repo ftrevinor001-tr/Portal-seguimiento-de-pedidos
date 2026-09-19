@@ -82,6 +82,12 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 
 Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (sin fórmula) y quedó con valores viejos: "TERMINADO" y "DENTRO DEL PLAZO", que ya no existen en la fórmula actual.
 
+## Pantallas (v1.5.0)
+- **Seguimiento** muestra solo **entregas directas y sobrepedido**. Los tickets se consultan y capturan en su propia pestaña.
+- En Seguimiento y en Tickets la pantalla ya no se desplaza: se desplaza **la tabla**, así el panel de filtros y los títulos de las columnas quedan siempre a la vista. La primera columna del tablero de tickets (el folio) queda fija al mover la tabla a los lados.
+- **Tickets** muestra: ticket, clave, estatus, etapa actual, solicitante, comprador, descripción, categoría, fecha y hora de solicitud, fecha y hora de asignación, tiempo de asignación, fecha límite y de entrega de la cotización, días de cada etapa, alertas de cotización y de compra, fecha de autorización, de pago, estimada de llegada y de terminación, días fuera de plazo, vigencia y total.
+- Filtros de Tickets: año, mes, comprador, solicitante, categoría, etapa, estatus, alerta de cotización, alerta de compra, rango de fechas de solicitud (desde/hasta) y búsqueda. El **Resumen** (KPIs, flujo por etapa y tiempos) se abre y cierra con un botón y recuerda la preferencia.
+
 ## Reemplazo de datos por módulo (v1.3 y v1.4)
 En *Datos y bitácora* hay dos cargas que **reemplazan** lo que ya está en el portal, sin borrar nada de forma definitiva: los renglones anteriores se dan de baja (siguen en "Ver dados de baja" y en la bitácora) y se carga el archivo completo.
 
