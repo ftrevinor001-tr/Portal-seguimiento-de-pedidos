@@ -2,7 +2,7 @@
 
 Aplicación web del Área de Compras para dar seguimiento a **sobrepedidos, entregas directas, pedidos especiales y tickets**. Sustituye al Google Sheet "Entregas Directas".
 
-- **Seguimiento**: tabla con filtros, alertas y KPIs. Permite editar una clave, editar varias a la vez, dar de baja o restaurar, y descargar a Excel.
+- **Sobrepedido** y **Entregas directas**: una pestaña para cada módulo, con tabla, filtros, alertas y KPIs. Permiten editar una clave, editar varias a la vez, dar de baja o restaurar, y descargar a Excel. Las tablas se ven como una hoja de Excel: al bajar con el scroll se agregan los renglones siguientes (no hay botón "Siguiente").
 - **Nuevo pedido**: captura por folio. El tiempo de entrega y el de descarga se toman de los catálogos. Las claves se capturan a mano o se cargan desde un CSV o Excel.
 - **Tickets**: las seis etapas de cada ticket (asignación, cotización, recotización, autorización, pago y llegada) con las alertas de cotización y de compra del reporte. Ver [`docs/reglas-de-calculo.md`](docs/reglas-de-calculo.md).
 - **Calendario E. Directas**: folios, proveedores y horas de descarga por día, con nivel de carga y el detalle de cada día.
@@ -58,8 +58,8 @@ Ver [`docs/acceso-y-contrasena.md`](docs/acceso-y-contrasena.md): se crea un usu
 
 | Tarea | Dónde |
 |---|---|
-| Registrar un pedido nuevo | Seguimiento → **＋ Nuevo pedido** |
-| Marcar la llegada o la factura de varias claves | Seguimiento → selecciona las filas → **Editar seleccionados** |
+| Registrar un pedido nuevo | Sobrepedido o Entregas directas → **＋ Nuevo pedido** |
+| Marcar la llegada o la factura de varias claves | Sobrepedido o Entregas directas → selecciona las filas (o la casilla del encabezado para todo el filtro) → **Editar seleccionados** |
 | Ver qué llega hoy y la carga de descarga | Calendario E. Directas |
 | Actualizar existencias | Datos y bitácora → **Actualizar maestro de artículos** (exportación con IDARTICULO y EXIUNIBAS) |
 | Dar de alta días festivos | Catálogos → **Días inhábiles** |
