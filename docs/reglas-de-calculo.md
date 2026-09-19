@@ -82,9 +82,12 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 
 Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (sin fórmula) y quedó con valores viejos: "TERMINADO" y "DENTRO DEL PLAZO", que ya no existen en la fórmula actual.
 
-## Pantallas (v1.5.0)
-- **Seguimiento** muestra solo **entregas directas y sobrepedido**. Los tickets se consultan y capturan en su propia pestaña.
-- En Seguimiento y en Tickets la pantalla ya no se desplaza: se desplaza **la tabla**, así el panel de filtros y los títulos de las columnas quedan siempre a la vista. La primera columna del tablero de tickets (el folio) queda fija al mover la tabla a los lados.
+## Pantallas (v1.6.0)
+- Hay una pestaña por módulo: **Sobrepedido** (sobrepedido, pedido especial y sucursal entrega directa) y **Entregas directas**. Los tickets siguen en su propia pestaña. La dirección anterior `#/seguimiento` lleva a Sobrepedido.
+- Las tres tablas (Sobrepedido, Entregas directas y Tickets) se ven **como una hoja de Excel**: ya no hay botones "Anterior/Siguiente"; al bajar con el scroll se agregan los renglones siguientes de 150 en 150 y el pie indica cuántos se están mostrando. El botón **Mostrar todos** pinta de golpe todos los renglones del filtro (útil para buscar con Ctrl+F).
+- La casilla del encabezado selecciona **todos los renglones del filtro**, no solo los que están a la vista.
+- La pantalla no se desplaza: se desplaza **la tabla**, así el panel de filtros y los títulos de las columnas quedan siempre a la vista. La primera columna del tablero de tickets (el folio) queda fija al mover la tabla a los lados.
+- El **Resumen** (KPIs) de cada pestaña se puede ocultar con un botón para que la tabla ocupe toda la pantalla; la preferencia se recuerda por pestaña.
 - **Tickets** muestra: ticket, clave, estatus, etapa actual, solicitante, comprador, descripción, categoría, fecha y hora de solicitud, fecha y hora de asignación, tiempo de asignación, fecha límite y de entrega de la cotización, días de cada etapa, alertas de cotización y de compra, fecha de autorización, de pago, estimada de llegada y de terminación, días fuera de plazo, vigencia y total.
 - Filtros de Tickets: año, mes, comprador, solicitante, categoría, etapa, estatus, alerta de cotización, alerta de compra, rango de fechas de solicitud (desde/hasta) y búsqueda. El **Resumen** (KPIs, flujo por etapa y tiempos) se abre y cierra con un botón y recuerda la preferencia.
 
