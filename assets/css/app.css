@@ -312,3 +312,27 @@ details.grp summary > b { color: var(--brand-1); }
 @media (max-width: 1100px) { .etapas-row.etapas-6, .flujo.flujo-7 { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 700px) { .etapas-row.etapas-6, .flujo.flujo-7 { grid-template-columns: repeat(2, 1fr); } }
 .lista-check { margin: 8px 0 12px 18px; } .lista-check li { margin: 3px 0; }
+
+/* v1.5.0 · Filtros fijos, tabla con scroll propio y primera columna fija */
+.card-filtros { position: sticky; top: calc(var(--top-h, 112px) - 2px); z-index: 15; padding-top: 12px; padding-bottom: 12px; box-shadow: 0 6px 14px rgba(20, 24, 40, .06); }
+.card-filtros .filters { margin: 0; }
+.card-filtros .flt select, .card-filtros .flt input { min-width: 120px; }
+/* La pantalla no se desplaza: se desplaza la tabla, así los filtros y los títulos de columna quedan fijos */
+.vista-fija { display: flex; flex-direction: column; gap: 12px; height: calc(100vh - var(--top-h, 112px) - 30px); }
+.vista-fija > .card { flex: none; }
+.vista-fija .card-tabla { flex: 1 1 auto; min-height: 220px; display: flex; flex-direction: column; overflow: hidden; }
+.vista-fija .card-tabla > div:last-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.vista-fija .table-wrap { flex: 1; min-height: 0; overflow: auto; }
+.resumen-toggle { display: flex; align-items: center; gap: 10px; }
+.resumen-toggle .btn { margin-left: auto; }
+.table-wrap.alto .grid th { top: 0; z-index: 3; box-shadow: 0 1px 0 var(--line); }
+.grid.lock-first th.col-fija, .grid.lock-first td.col-fija { position: sticky; left: 0; background: #fff; z-index: 2; box-shadow: 1px 0 0 var(--line); font-weight: 700; }
+.grid.lock-first th.col-fija { background: #f7f8fb; z-index: 4; }
+.grid.lock-first tr:hover td.col-fija { background: #fff7f0; }
+@media (max-width: 900px) { .card-filtros { position: static; } .vista-fija { height: auto; display: block; } .vista-fija .table-wrap { max-height: none; } }
+.card-head.compacta { padding-bottom: 0; margin-bottom: -4px; }
+.card-head.compacta h2 { font-size: 17px; }
+.vista-fija > .card-hero { padding-top: 12px; padding-bottom: 12px; }
+.card-resumen { padding: 10px 14px; } .card-resumen .kpis { margin-top: 10px; }
+.grid td.trunc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
+.grid tr:hover td.trunc { white-space: normal; }
