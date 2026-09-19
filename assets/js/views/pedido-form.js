@@ -11,7 +11,7 @@
     const st = { tipo: C.TIPOS_SOLICITUD.includes(tipoInicial) ? tipoInicial : 'ENTREGA DIRECTA', lineas: [], manualTE: false, manualTD: false, compModo: C.MODOS_COMPRADOR.includes(modoGuardado) ? modoGuardado : 'CLAVES' };
     const body = U.h(`<form class="pf" autocomplete="off">
       <section class="pf-sec"><h3>Tipo de solicitud</h3>
-        <div class="grid-fields"><div class="fld"><label for="pf_tipo">Selecciona el tipo de solicitud *</label><select id="pf_tipo" name="tipo">${U.options(C.TIPOS_SOLICITUD, st.tipo)}</select><small>La captura se adapta según el tipo seleccionado.</small></div></div>
+        <div class="grid-fields"><div class="fld"><label for="pf_tipo">Selecciona el tipo de solicitud *</label><select id="pf_tipo" name="tipo">${U.options(st.tipo === 'TICKET' ? ['TICKET'] : C.TIPOS_SOLICITUD.filter((t) => t !== 'TICKET'), st.tipo)}</select><small>La captura se adapta según el tipo seleccionado.</small></div></div>
       </section>
       <section class="pf-sec"><h3>Datos generales</h3>
         <div class="grid-fields">

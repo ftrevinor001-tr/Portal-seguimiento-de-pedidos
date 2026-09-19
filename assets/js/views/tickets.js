@@ -1,6 +1,6 @@
 /* Tickets por etapas — réplica del "REPORTE DE TICKETS" (v1.3.0) */
 (function () {
-  const st = { anio: '', mes: '', comprador: '', solicitante: '', categoria: '', etapa: '', alerta_cot: '', alerta_compra: '', q: '' };
+  const st = { anio: '', mes: '', comprador: '', solicitante: '', categoria: '', etapa: '', estatus: '', alerta_cot: '', alerta_compra: '', desde: '', hasta: '', q: '' };
   let root = null, table = null;
   const CLS_ETAPA = { 'POR ASIGNAR': 'warning', 'EN COTIZACIÓN': 'info', 'ESPERA DEL USUARIO': 'info', 'POR RECOTIZAR': 'critical', 'POR PAGAR': 'warning', 'EN SURTIMIENTO': 'ok', ENTREGADO: 'ok', CANCELADO: 'muted' };
   const CLS_ALERTA = { 'EN TIEMPO': 'ok', 'POR VENCER': 'warning', 'VENCE HOY': 'warning', 'FUERA DEL PLAZO': 'critical', FINALIZADO: 'ok', 'SIN FECHA LIMITE': 'muted', 'SIN AUTORIZACION DE COMPRA': 'muted', 'SIN FECHA ESTIMADA': 'muted', CANCELADO: 'muted' };
@@ -19,6 +19,12 @@
         comprador: p.comprador || '', solicitante: p.solicitante || '', categoria: p.categoria_ticket || '',
         descripcion: claves.map((x) => x.descripcion).filter(Boolean).join(' · '),
         fecha_solicitud: U.iso(p.fecha_solicitud),
+        clave: U.uniq(claves.map((x) => x.clave)).join(', ') || 'NUEVO',
+        estatus: p.status_pedido || '',
+        f_sol: U.iso(p.fecha_solicitud), h_sol: (U.isoDateTime(p.fecha_solicitud) || '').slice(11, 16),
+        f_asig: U.iso(p.fecha_asignacion), h_asig: (U.isoDateTime(p.fecha_asignacion) || '').slice(11, 16),
+        f_cot: U.iso(p.fecha_cotizacion_usuario), f_aut: U.iso(p.fecha_autorizacion_compra),
+        f_pago: U.iso(p.fecha_pago_proveedor), f_est: U.iso(p.fecha_estimada), f_fin: U.iso(p.fecha_real_llegada),
         horas: t.horasAsignacion, alerta_cot: t.alertaCotizacion, alerta_compra: t.alertaCompra,
         fuera: t.diasFuera, total: t.total, venceEn: t.venceEn, vigente: t.vigente, limite: t.limite,
       };
@@ -34,9 +40,12 @@
       if (st.solicitante && r.solicitante !== st.solicitante) return false;
       if (st.categoria && r.categoria !== st.categoria) return false;
       if (st.etapa && r.etapa !== st.etapa) return false;
+      if (st.estatus && U.norm(r.estatus) !== st.estatus) return false;
+      if (st.desde && (!r.fecha_solicitud || r.fecha_solicitud < st.desde)) return false;
+      if (st.hasta && (!r.fecha_solicitud || r.fecha_solicitud > st.hasta)) return false;
       if (st.alerta_cot && r.alerta_cot !== st.alerta_cot) return false;
       if (st.alerta_compra && r.alerta_compra !== st.alerta_compra) return false;
-      if (q && !U.norm(`${r.folio} ${r.descripcion} ${r.comprador} ${r.solicitante} ${r.categoria}`).includes(q)) return false;
+      if (q && !U.norm(`${r.folio} ${r.clave} ${r.descripcion} ${r.comprador} ${r.solicitante} ${r.categoria}`).includes(q)) return false;
       return true;
     });
   }
@@ -51,22 +60,35 @@
   };
 
   const COLS = [
-    { k: 'folio', label: 'Ticket', cls: 'nowrap' },
-    { k: 'fecha_solicitud', label: 'Solicitud', cls: 'nowrap', render: (r) => U.fmtDateTime(r.p.fecha_solicitud) },
-    { k: 'solicitante', label: 'Solicitante' },
-    { k: 'comprador', label: 'Comprador' },
-    { k: 'descripcion', label: 'Descripción', cls: 'desc', width: '220px' },
+    { k: 'folio', label: 'Ticket', cls: 'nowrap col-fija' },
+    { k: 'clave', label: 'Clave', cls: 'nowrap' },
+    { k: 'estatus', label: 'Estatus', render: (r) => UI.status(r.estatus) },
     { k: 'etapa', label: 'Etapa actual', width: '150px', render: (r) => `<span class="badge badge-${CLS_ETAPA[r.etapa] || 'muted'}">${U.esc(r.etapa)}</span>` },
-    { k: 'horas', label: '1 Asignación', cls: 'num', render: (r) => celda(r, 'asignacion'), sort: (r) => r.horas },
+    { k: 'solicitante', label: 'Solicitante', cls: 'trunc', width: '130px' },
+    { k: 'comprador', label: 'Comprador', cls: 'trunc', width: '140px' },
+    { k: 'descripcion', label: 'Descripción', cls: 'desc trunc', width: '260px' },
+    { k: 'categoria', label: 'Categoría', cls: 'trunc', width: '150px' },
+    { k: 'f_sol', label: 'F. solicitud', cls: 'nowrap', render: (r) => U.fmtDate(r.f_sol) },
+    { k: 'h_sol', label: 'Hora solicitud', cls: 'nowrap' },
+    { k: 'f_asig', label: 'F. asignación', cls: 'nowrap', render: (r) => U.fmtDate(r.f_asig) },
+    { k: 'h_asig', label: 'Hora asignación', cls: 'nowrap' },
+    { k: 'horas', label: 'Tiempo de asignación', cls: 'num', render: (r) => celda(r, 'asignacion'), sort: (r) => r.horas },
     { k: 'limite', label: 'F. límite cotiz.', cls: 'nowrap', render: (r) => U.fmtDate(r.limite) },
+    { k: 'f_cot', label: 'F. entrega cotiz.', cls: 'nowrap', render: (r) => U.fmtDate(r.f_cot) },
     { k: 'd2', label: '2 Cotización', cls: 'num', render: (r) => celda(r, 'cotizacion'), sort: (r) => r.t.dias.cotizacion },
     { k: 'alerta_cot', label: 'Alerta cotización', width: '150px', render: (r) => badge(r.alerta_cot) },
     { k: 'd3', label: '3 Recot.', cls: 'num', render: (r) => celda(r, 'recotizacion'), sort: (r) => r.t.dias.recotizacion },
+    { k: 'f_aut', label: 'F. autorización', cls: 'nowrap', render: (r) => U.fmtDate(r.f_aut) },
     { k: 'd4', label: '4 Autorización', cls: 'num', render: (r) => celda(r, 'autorizacion'), sort: (r) => r.t.dias.autorizacion },
+    { k: 'f_pago', label: 'F. pago', cls: 'nowrap', render: (r) => U.fmtDate(r.f_pago) },
     { k: 'd5', label: '5 Pago', cls: 'num', render: (r) => celda(r, 'pago'), sort: (r) => r.t.dias.pago },
+    { k: 'f_est', label: 'F. estimada llegada', cls: 'nowrap', render: (r) => U.fmtDate(r.f_est) },
+    { k: 'f_fin', label: 'F. terminación', cls: 'nowrap', render: (r) => U.fmtDate(r.f_fin) },
     { k: 'd6', label: '6 Llegada', cls: 'num', render: (r) => celda(r, 'entrega'), sort: (r) => r.t.dias.entrega },
     { k: 'alerta_compra', label: 'Alerta compra', width: '160px', render: (r) => badge(r.alerta_compra) },
     { k: 'fuera', label: 'Días fuera de plazo', cls: 'num', render: (r) => r.fuera === null ? '' : (r.fuera > 0 ? `<b class="error">${r.fuera}</b>` : '0') },
+    { k: 'venceEn', label: 'Vigencia cotización', cls: 'nowrap', render: (r) => r.venceEn === null ? '' : r.venceEn < 0 ? `<span class="badge badge-critical">Venció hace ${-r.venceEn} d</span>` : `${U.fmtDate(r.vigente)} · ${r.venceEn} d` },
+    { k: 'total', label: 'Total (días háb.)', cls: 'num' },
   ];
 
   function kpis(rows) {
@@ -118,11 +140,16 @@
 
   function draw() {
     const rows = filtrar(tickets());
-    U.$('#tkKpis', root).innerHTML = kpis(rows);
-    U.$('#tkFlujo', root).innerHTML = flujo(rows);
-    U.$$('[data-etapa]', root).forEach((b) => b.onclick = () => { st.etapa = st.etapa === b.dataset.etapa ? '' : b.dataset.etapa; filtros(); draw(); });
-    U.$('#tkEtapas', root).innerHTML = resumenEtapas(rows);
-    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'fecha_solicitud', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.' });
+    const abierto = !U.$('#tkResumen', root).hidden;
+    const cnt = (e) => rows.filter((r) => r.etapa === e).length;
+    U.$('#tkResumenMini', root).textContent = `${U.fmtNum(rows.length)} tickets · ${U.fmtNum(cnt('POR ASIGNAR'))} por asignar · ${U.fmtNum(rows.filter((r) => r.alerta_cot === 'FUERA DEL PLAZO').length)} cotización fuera de plazo · ${U.fmtNum(cnt('ENTREGADO'))} entregados`;
+    if (abierto) {
+      U.$('#tkKpis', root).innerHTML = kpis(rows);
+      U.$('#tkFlujo', root).innerHTML = flujo(rows);
+      U.$$('[data-etapa]', root).forEach((b) => b.onclick = () => { st.etapa = st.etapa === b.dataset.etapa ? '' : b.dataset.etapa; filtros(); draw(); });
+      U.$('#tkEtapas', root).innerHTML = resumenEtapas(rows);
+    }
+    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'f_sol', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.', alto: true, cls: 'lock-first' });
   }
 
   function filtros() {
@@ -133,9 +160,12 @@
       { k: 'solicitante', label: 'Solicitante', options: () => S.lista('SOLICITANTE', 'TICKET') },
       { k: 'categoria', label: 'Categoría', options: () => S.lista('CATEGORIA'), wide: true },
       { k: 'etapa', label: 'Etapa', options: () => C.ETAPAS_FLUJO_TICKET.concat(['CANCELADO']) },
+      { k: 'estatus', label: 'Estatus', options: () => C.STATUS.TICKET },
       { k: 'alerta_cot', label: 'Alerta cotización', options: () => C.ALERTAS_TICKET },
       { k: 'alerta_compra', label: 'Alerta compra', options: () => C.ALERTAS_TICKET },
-      { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Ticket, descripción, solicitante…', wide: true },
+      { k: 'desde', label: 'Solicitud desde', type: 'date' },
+      { k: 'hasta', label: 'Solicitud hasta', type: 'date' },
+      { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Ticket, clave, descripción, solicitante…', wide: true },
     ], st, () => draw(), { actions: '<button class="btn btn-ghost btn-sm" id="tkClear">Limpiar</button>' });
     U.$('#tkClear', root).onclick = () => { Object.keys(st).forEach((k) => st[k] = ''); filtros(); draw(); };
   }
@@ -182,19 +212,35 @@
   APP.register('tickets', {
     render(c) {
       root = c; table = null;
+      c.classList.add('vista-fija');
       c.innerHTML = `<section class="card card-hero">
-          <div class="card-head"><h2>Tickets por etapa</h2>
-            <div class="head-actions"><button class="btn btn-ghost" id="tkXls">⭳ Descargar Excel</button>${S.puedeEditar() ? '<button class="btn btn-primary" id="tkNuevo">＋ Nuevo ticket</button>' : ''}</div>
+          <div class="card-head compacta"><h2>Tickets por etapa</h2>
+            <div class="head-actions"><button class="btn btn-ghost btn-sm" id="tkXls">⭳ Descargar Excel</button>${S.puedeEditar() ? '<button class="btn btn-primary btn-sm" id="tkNuevo">＋ Nuevo ticket</button>' : ''}</div>
           </div>
-          <p class="muted">Etapas: <b>1 Asignación</b> (horas del jefe de área) · <b>2 Cotización</b> (contra la fecha límite de la categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
-          <div id="tkFilters"></div>
         </section>
-        <div id="tkKpis"></div>
-        <div id="tkFlujo"></div>
-        <div id="tkEtapas"></div>
-        <section class="card"><div class="card-head"><h2>Tickets</h2><p class="muted">Da clic en un ticket para capturar sus fechas.</p></div><div id="tkTable"></div></section>`;
+        <section class="card card-filtros" id="tkFiltrosCard"><div id="tkFilters"></div></section>
+        <section class="card card-resumen"><div class="resumen-toggle"><b>Resumen</b><span class="muted small" id="tkResumenMini"></span><button class="btn btn-light btn-sm" id="tkVerResumen">Ver resumen ▾</button></div>
+          <div id="tkResumen" hidden>
+            <p class="muted small">Etapas: <b>1 Asignación</b> (horas del jefe de área) · <b>2 Cotización</b> (contra la fecha límite de la categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
+            <div id="tkKpis"></div><div id="tkFlujo"></div><div id="tkEtapas"></div></div>
+        </section>
+        <section class="card card-tabla"><div id="tkTable"></div></section>`;
       if (!S.cargado) { U.$('#tkTable', c).innerHTML = UI.empty('Cargando…'); return; }
-      filtros(); draw();
+      filtros();
+      let abierto = false;
+      try { abierto = localStorage.getItem('sp_tk_resumen') === '1'; } catch { /* sin storage */ }
+      const pintarResumen = () => {
+        U.$('#tkResumen', c).hidden = !abierto;
+        U.$('#tkVerResumen', c).textContent = abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾';
+        setTimeout(APP.medirTop, 30);
+      };
+      U.$('#tkVerResumen', c).onclick = () => {
+        abierto = !abierto;
+        try { localStorage.setItem('sp_tk_resumen', abierto ? '1' : '0'); } catch { /* sin storage */ }
+        pintarResumen(); draw();
+      };
+      pintarResumen();
+      draw();
       U.$('#tkXls', c).onclick = exportar;
       const nuevo = U.$('#tkNuevo', c); if (nuevo) nuevo.onclick = () => APP.nuevoPedido('TICKET');
     },

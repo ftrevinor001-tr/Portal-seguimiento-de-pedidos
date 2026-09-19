@@ -25,7 +25,10 @@
     return cols;
   };
 
-  function base() { return st.bajas ? (S.bajas || []) : S.pedidos; }
+  // Los tickets tienen su propia pestaña: aquí solo sobrepedido y entregas directas
+  const SIN_TICKET = (p) => p.modulo !== 'TICKET';
+  const MODULOS_SEG = C.MODULOS.filter((m) => m.value !== 'TICKET');
+  function base() { return (st.bajas ? (S.bajas || []) : S.pedidos).filter(SIN_TICKET); }
   function filtrar() {
     const q = U.norm(st.q);
     return base().filter((p) => {
@@ -49,9 +52,9 @@
     { k: 'modulo', label: 'Tipo', render: (p) => `<span class="mod mod-${p.modulo}">${U.esc(p.tipo_solicitud || C.MODULO_LABEL[p.modulo])}</span>` },
     { k: 'folio_pedido', label: 'Folio', cls: 'nowrap' },
     { k: 'clave', label: 'Clave', cls: 'nowrap', sort: (p) => isNaN(p.clave) ? p.clave : Number(p.clave) },
-    { k: 'descripcion', label: 'Descripción', cls: 'desc', width: '240px' },
-    { k: 'comprador', label: 'Comprador' },
-    { k: 'solicitante', label: 'Solicitante' },
+    { k: 'descripcion', label: 'Descripción', cls: 'desc trunc', width: '260px' },
+    { k: 'comprador', label: 'Comprador', cls: 'trunc', width: '140px' },
+    { k: 'solicitante', label: 'Solicitante', cls: 'trunc', width: '130px' },
     { k: 'cantidad_solicitada', label: 'Cant.', cls: 'num', render: (p) => U.fmtNumAuto(p.cantidad_solicitada) },
     { k: 'fecha_solicitud', label: 'F. solicitud', cls: 'nowrap', render: (p) => U.fmtDate(p.fecha_solicitud) },
     { k: 'fecha_estimada', label: 'F. estimada', cls: 'nowrap', render: (p) => U.fmtDate(p.fecha_estimada) },
@@ -78,7 +81,7 @@
     const rows = filtrar();
     U.$('#segKpis', root).innerHTML = kpis(rows);
     if (!table) {
-      table = UI.table(U.$('#segTable', root), { cols: COLS, rows, selectable: S.puedeEditar(), onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1 });
+      table = UI.table(U.$('#segTable', root), { cols: COLS, rows, selectable: S.puedeEditar(), onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1, alto: true });
       table.onSelect = (sel) => { const b = U.$('#btnBulk', root); if (!b) return; b.disabled = !sel.size; b.textContent = sel.size ? `Editar ${sel.size} seleccionados` : 'Editar seleccionados'; };
     } else table.setRows(rows);
     table.onSelect(table.selected());
@@ -87,7 +90,7 @@
   function filtros() {
     const mod = st.modulo || undefined;
     APP.filterBar(U.$('#segFilters', root), [
-      { k: 'modulo', label: 'Módulo', options: APP.moduloOpts },
+      { k: 'modulo', label: 'Módulo', options: () => MODULOS_SEG },
       { k: 'anio', label: 'Año (solicitud)', options: APP.anios },
       { k: 'mes', label: 'Mes (solicitud)', options: APP.mesesOpts },
       { k: 'anio_est', label: 'Año (f. estimada)', options: () => U.uniq(base().map((p) => U.iso(p.fecha_estimada) ? +U.iso(p.fecha_estimada).slice(0, 4) : null)).sort((a, b) => b - a) },
@@ -134,7 +137,7 @@
     const ld = UI.loading('Generando Excel…');
     try {
       const sheets = st.modulo ? [{ name: C.MODULO_LABEL[st.modulo], columns: APP.columnasExport(st.modulo), rows }]
-        : C.MODULOS.map((m) => ({ name: C.MODULO_LABEL[m.value], columns: APP.columnasExport(m.value), rows: rows.filter((p) => p.modulo === m.value) })).filter((s) => s.rows.length);
+        : MODULOS_SEG.map((m) => ({ name: C.MODULO_LABEL[m.value], columns: APP.columnasExport(m.value), rows: rows.filter((p) => p.modulo === m.value) })).filter((s) => s.rows.length);
       await XL.exportar(sheets, `seguimiento_${S.hoy}.xlsx`);
     } finally { UI.loading(false); }
   }
@@ -142,19 +145,20 @@
   APP.register('seguimiento', {
     render(c) {
       root = c; table = null;
+      c.classList.add('vista-fija');
       c.innerHTML = `
         <section class="card">
-          <div class="card-head"><h2>Seguimiento de pedidos</h2>
+          <div class="card-head compacta"><h2>Seguimiento de pedidos <span class="muted small">· entregas directas y sobrepedido</span></h2>
             <div class="head-actions">
               <label class="chk"><input type="checkbox" id="chkBajas" ${st.bajas ? 'checked' : ''}> Ver dados de baja</label>
               ${S.puedeEditar() ? '<button class="btn btn-ghost" id="btnBulk" disabled>Editar seleccionados</button>' : ''}
               <button class="btn btn-ghost" id="btnXls">⭳ Descargar Excel</button>
               ${S.puedeEditar() ? '<button class="btn btn-primary" id="btnNuevo">＋ Nuevo pedido</button>' : '<button class="btn btn-primary" id="btnEntrarSeg">🔒 Entrar para editar</button>'}
             </div></div>
-          <div id="segFilters"></div>
         </section>
-        <div id="segKpis"></div>
-        <section class="card"><div id="segTable"></div></section>`;
+        <section class="card card-filtros" id="segFiltrosCard"><div id="segFilters"></div></section>
+        <div id="segKpis" class="kpis-slot"></div>
+        <section class="card card-tabla"><div id="segTable"></div></section>`;
       filtros();
       if (!S.cargado) { U.$('#segTable', c).innerHTML = UI.empty('Cargando…'); return; }
       draw();
