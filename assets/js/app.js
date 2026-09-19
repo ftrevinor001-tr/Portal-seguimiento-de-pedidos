@@ -19,12 +19,13 @@
   APP.filterBar = function (container, spec, state, onChange, { actions } = {}) {
     container.innerHTML = `<div class="filters">${spec.map((s) => {
       if (s.type === 'search') return `<div class="flt flt-wide"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="search" data-k="${s.k}" value="${U.esc(state[s.k] || '')}" placeholder="${U.esc(s.placeholder || '')}"></div>`;
+      if (s.type === 'date') return `<div class="flt"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="date" data-k="${s.k}" value="${U.esc(state[s.k] || '')}"></div>`;
       const opts = s.options();
       return `<div class="flt ${s.wide ? 'flt-wide' : ''}"><label for="flt_${s.k}">${U.esc(s.label)}</label><select id="flt_${s.k}" data-k="${s.k}">${U.options(opts, state[s.k], s.empty === null ? {} : { empty: s.empty ?? 'Todos' })}</select></div>`;
     }).join('')}${actions ? `<div class="flt flt-actions">${actions}</div>` : ''}</div>`;
     U.$$('[data-k]', container).forEach((el) => {
       const fire = () => { state[el.dataset.k] = el.value; onChange(el.dataset.k); };
-      if (el.tagName === 'INPUT') el.addEventListener('input', U.debounce(fire, 250)); else el.addEventListener('change', fire);
+      if (el.tagName === 'INPUT' && el.type !== 'date') el.addEventListener('input', U.debounce(fire, 250)); else el.addEventListener('change', fire);
     });
   };
   APP.anios = () => U.uniq(S.pedidos.map((p) => { const m = C.mesSolicitud(p); return m ? m.anio : null; }).concat(S.pedidos.map((p) => U.iso(p.fecha_estimada) ? +U.iso(p.fecha_estimada).slice(0, 4) : null)).concat([+S.hoy.slice(0, 4)])).sort((a, b) => b - a);
@@ -93,6 +94,14 @@
     UI.toast('Saliste del modo edición: ahora solo puedes consultar.');
   };
 
+  /** Mide el alto del encabezado para que los filtros y los títulos de tabla se queden fijos debajo */
+  APP.medirTop = function () {
+    const t = U.$('.top');
+    if (t) document.documentElement.style.setProperty('--top-h', `${Math.round(t.getBoundingClientRect().height)}px`);
+    const f = U.$('.card-filtros');
+    document.documentElement.style.setProperty('--flt-h', f ? `${Math.round(f.getBoundingClientRect().height)}px` : '0px');
+  };
+
   /* ---------- Navegación ---------- */
   function renderShell() {
     document.title = CFG.TITULO || 'Portal de Seguimiento de Pedidos';
@@ -130,8 +139,9 @@
     const view = APP.views[name] || APP.views.seguimiento;
     APP.current = name;
     U.$$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === name));
-    const c = U.$('#view'); c.innerHTML = '';
+    const c = U.$('#view'); c.innerHTML = ''; c.className = '';
     try { view.render(c); } catch (e) { console.error(e); c.innerHTML = `<div class="card error-card"><h3>Error al mostrar la pantalla</h3><pre>${U.esc(e.stack || e.message)}</pre></div>`; }
+    setTimeout(APP.medirTop, 30);
   };
   APP.rerender = () => { const v = APP.views[APP.current]; if (v && v.refresh) v.refresh(); else APP.go(); };
 
@@ -163,6 +173,7 @@
     await S.restaurarSesion();
     renderShell();
     window.addEventListener('hashchange', APP.go);
+    window.addEventListener('resize', U.debounce(APP.medirTop, 200));
     APP.go();
     await APP.reload();
     // Renueva el token cada 10 minutos mientras el portal esté abierto

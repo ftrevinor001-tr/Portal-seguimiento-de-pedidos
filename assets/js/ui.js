@@ -80,7 +80,7 @@
    * Tabla ordenable y paginada.
    * cols: [{k, label, render(row), sort(row), cls, width}]
    */
-  UI.table = function (container, { cols, rows, pageSize = 50, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.' }) {
+  UI.table = function (container, { cols, rows, pageSize = 50, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '' }) {
     const st = { page: 0, sortKey, sortDir, selected: new Set() };
     function sorted() {
       if (!st.sortKey) return rows;
@@ -99,7 +99,7 @@
       if (st.page >= pages) st.page = pages - 1;
       const slice = data.slice(st.page * pageSize, (st.page + 1) * pageSize);
       container.innerHTML = `
-        <div class="table-wrap"><table class="grid">
+        <div class="table-wrap ${alto ? 'alto' : ''}"><table class="grid ${cls}">
           <thead><tr>${selectable ? '<th class="sel"><input type="checkbox" class="sel-all" aria-label="Seleccionar página"></th>' : ''}${cols.map((c) => `<th data-k="${c.k}" class="${c.cls || ''} ${st.sortKey === c.k ? (st.sortDir > 0 ? 'asc' : 'desc') : ''}" ${c.width ? `style="min-width:${c.width}"` : ''}>${U.esc(c.label)}</th>`).join('')}</tr></thead>
           <tbody>${slice.length ? slice.map((r) => `<tr data-id="${U.esc(rowKey(r))}" class="${onRow ? 'clickable' : ''}">${selectable ? `<td class="sel"><input type="checkbox" class="sel-one" ${st.selected.has(rowKey(r)) ? 'checked' : ''} aria-label="Seleccionar"></td>` : ''}${cols.map((c) => `<td class="${c.cls || ''}">${c.render ? c.render(r) : U.esc(r[c.k] ?? '')}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + (selectable ? 1 : 0)}">${UI.empty(emptyMsg)}</td></tr>`}</tbody>
         </table></div>
