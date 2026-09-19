@@ -77,13 +77,18 @@
   UI.empty = (msg) => `<div class="empty">${U.esc(msg)}</div>`;
 
   /**
-   * Tabla ordenable y paginada.
-   * cols: [{k, label, render(row), sort(row), cls, width}]
+   * Tabla ordenable con desplazamiento continuo, como una hoja de Excel (v1.6.0):
+   * no hay botón "Siguiente"; al bajar con el scroll se agregan más renglones y el
+   * encabezado se queda fijo. cols: [{k, label, render(row), sort(row), cls, width}]
    */
-  UI.table = function (container, { cols, rows, pageSize = 50, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '' }) {
-    const st = { page: 0, sortKey, sortDir, selected: new Set() };
+  UI.table = function (container, { cols, rows, bloque = 150, pageSize, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '' }) {
+    if (pageSize) bloque = pageSize; // compatibilidad con llamadas antiguas
+    const st = { sortKey, sortDir, selected: new Set(), shown: 0 };
+    const nCols = cols.length + (selectable ? 1 : 0);
+    let data = [], porClave = new Map(), wrap = null, tbody = null, pie = null;
+
     function sorted() {
-      if (!st.sortKey) return rows;
+      if (!st.sortKey) return rows.slice();
       const c = cols.find((x) => x.k === st.sortKey); const get = c && c.sort ? c.sort : (r) => r[st.sortKey];
       return rows.slice().sort((a, b) => {
         let va = get(a), vb = get(b);
@@ -93,28 +98,98 @@
         return String(va).localeCompare(String(vb), 'es', { numeric: true }) * st.sortDir;
       });
     }
+
+    const fila = (r) => {
+      const k = rowKey(r), sel = st.selected.has(k);
+      return `<tr data-id="${U.esc(k)}" class="${onRow ? 'clickable' : ''} ${sel ? 'row-sel' : ''}">${selectable ? `<td class="sel"><input type="checkbox" class="sel-one" ${sel ? 'checked' : ''} aria-label="Seleccionar"></td>` : ''}${cols.map((c) => `<td class="${c.cls || ''}">${c.render ? c.render(r) : U.esc(r[c.k] ?? '')}</td>`).join('')}</tr>`;
+    };
+
+    function pintarPie() {
+      if (!pie) return;
+      const falta = data.length - st.shown;
+      pie.innerHTML = `<span>${U.fmtNum(data.length)} ${data.length === 1 ? 'registro' : 'registros'}${selectable && st.selected.size ? ` · <b>${st.selected.size} seleccionados</b>` : ''}</span>
+        <span class="pager-pos">${!data.length ? '' : falta > 0
+          ? `Mostrando ${U.fmtNum(st.shown)} de ${U.fmtNum(data.length)} · baja para ver más o <button class="btn btn-sm btn-ghost" data-todo="1">Mostrar todos</button>`
+          : data.length === 1 ? 'Se muestra el único renglón' : `Se muestran los ${U.fmtNum(data.length)} renglones`}</span>`;
+      const b = U.$('[data-todo]', pie);
+      if (b) b.onclick = () => {
+        const ld = data.length - st.shown > 800 ? UI.loading('Mostrando todos los renglones…') : null;
+        setTimeout(() => { while (st.shown < data.length) agregar(); pintarPie(); if (ld) UI.loading(false); }, 20);
+      };
+    }
+
+    /** ¿El final de la tabla está cerca de la vista? (sirve con scroll propio o de la página) */
+    function cerca() {
+      if (!tbody || !document.body.contains(tbody)) return false;
+      if (alto && wrap.scrollHeight > wrap.clientHeight + 4) return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 600;
+      const r = wrap.getBoundingClientRect();
+      return r.bottom - window.innerHeight < 600;
+    }
+    function agregar() {
+      if (st.shown >= data.length) return false;
+      const next = data.slice(st.shown, st.shown + bloque);
+      tbody.insertAdjacentHTML('beforeend', next.map(fila).join(''));
+      st.shown += next.length;
+      return true;
+    }
+    function rellenar() {
+      let g = 0;
+      while (st.shown < data.length && cerca() && g++ < 200) agregar();
+      pintarPie();
+    }
+    function alScroll() {
+      if (!tbody || !document.body.contains(tbody)) { window.removeEventListener('scroll', alScroll); return; }
+      rellenar();
+    }
+
+    const sincronizarTodos = () => {
+      const all = U.$('.sel-all', container);
+      if (all) all.checked = !!data.length && st.selected.size >= data.length && data.every((r) => st.selected.has(rowKey(r)));
+    };
+
     function draw() {
-      const data = sorted();
-      const pages = Math.max(1, Math.ceil(data.length / pageSize));
-      if (st.page >= pages) st.page = pages - 1;
-      const slice = data.slice(st.page * pageSize, (st.page + 1) * pageSize);
+      data = sorted(); st.shown = 0;
+      porClave = new Map(data.map((r) => [String(rowKey(r)), r]));
       container.innerHTML = `
         <div class="table-wrap ${alto ? 'alto' : ''}"><table class="grid ${cls}">
-          <thead><tr>${selectable ? '<th class="sel"><input type="checkbox" class="sel-all" aria-label="Seleccionar página"></th>' : ''}${cols.map((c) => `<th data-k="${c.k}" class="${c.cls || ''} ${st.sortKey === c.k ? (st.sortDir > 0 ? 'asc' : 'desc') : ''}" ${c.width ? `style="min-width:${c.width}"` : ''}>${U.esc(c.label)}</th>`).join('')}</tr></thead>
-          <tbody>${slice.length ? slice.map((r) => `<tr data-id="${U.esc(rowKey(r))}" class="${onRow ? 'clickable' : ''}">${selectable ? `<td class="sel"><input type="checkbox" class="sel-one" ${st.selected.has(rowKey(r)) ? 'checked' : ''} aria-label="Seleccionar"></td>` : ''}${cols.map((c) => `<td class="${c.cls || ''}">${c.render ? c.render(r) : U.esc(r[c.k] ?? '')}</td>`).join('')}</tr>`).join('') : `<tr><td colspan="${cols.length + (selectable ? 1 : 0)}">${UI.empty(emptyMsg)}</td></tr>`}</tbody>
+          <thead><tr>${selectable ? '<th class="sel"><input type="checkbox" class="sel-all" title="Seleccionar todos los renglones del filtro" aria-label="Seleccionar todo"></th>' : ''}${cols.map((c) => `<th data-k="${c.k}" class="${c.cls || ''} ${st.sortKey === c.k ? (st.sortDir > 0 ? 'ord-asc' : 'ord-desc') : ''}" ${c.width ? `style="min-width:${c.width}"` : ''}>${U.esc(c.label)}</th>`).join('')}</tr></thead>
+          <tbody></tbody>
         </table></div>
-        <div class="pager"><span>${U.fmtNum(data.length)} registros${selectable && st.selected.size ? ` · <b>${st.selected.size} seleccionados</b>` : ''}</span>
-          <span class="pager-btns"><button class="btn btn-sm btn-ghost" data-p="prev" ${st.page === 0 ? 'disabled' : ''}>‹ Anterior</button>
-          <span>Página ${st.page + 1} de ${pages}</span>
-          <button class="btn btn-sm btn-ghost" data-p="next" ${st.page >= pages - 1 ? 'disabled' : ''}>Siguiente ›</button></span></div>`;
+        <div class="pager"></div>`;
+      wrap = U.$('.table-wrap', container); tbody = U.$('tbody', container); pie = U.$('.pager', container);
       U.$$('th[data-k]', container).forEach((th) => th.onclick = () => { const k = th.dataset.k; if (st.sortKey === k) st.sortDir *= -1; else { st.sortKey = k; st.sortDir = 1; } draw(); });
-      U.$$('[data-p]', container).forEach((b) => b.onclick = () => { st.page += b.dataset.p === 'next' ? 1 : -1; draw(); });
-      if (onRow) U.$$('tbody tr.clickable', container).forEach((tr) => tr.addEventListener('click', (e) => { if (e.target.closest('.sel')) return; const id = tr.dataset.id; const r = slice.find((x) => String(rowKey(x)) === id); if (r) onRow(r); }));
+
+      if (!data.length) { tbody.innerHTML = `<tr><td colspan="${nCols}">${UI.empty(emptyMsg)}</td></tr>`; pintarPie(); return; }
+
+      agregar(); rellenar();
+      wrap.addEventListener('scroll', alScroll, { passive: true });
+      window.addEventListener('scroll', alScroll, { passive: true }); // por si la pantalla es angosta y se desplaza la página
+
+      if (onRow) tbody.addEventListener('click', (e) => {
+        if (e.target.closest('.sel')) return;
+        const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+        const r = porClave.get(tr.dataset.id); if (r) onRow(r);
+      });
       if (selectable) {
-        U.$$('.sel-one', container).forEach((cb) => cb.onchange = () => { const id = cb.closest('tr').dataset.id; const r = slice.find((x) => String(rowKey(x)) === id); const key = rowKey(r); if (cb.checked) st.selected.add(key); else st.selected.delete(key); draw(); api.onSelect && api.onSelect(st.selected); });
-        const all = U.$('.sel-all', container); if (all) { all.checked = slice.length && slice.every((r) => st.selected.has(rowKey(r))); all.onchange = () => { slice.forEach((r) => all.checked ? st.selected.add(rowKey(r)) : st.selected.delete(rowKey(r))); draw(); api.onSelect && api.onSelect(st.selected); }; }
+        tbody.addEventListener('change', (e) => {
+          const cb = e.target.closest('.sel-one'); if (!cb) return;
+          const tr = cb.closest('tr'); const r = porClave.get(tr.dataset.id); if (!r) return;
+          if (cb.checked) st.selected.add(rowKey(r)); else st.selected.delete(rowKey(r));
+          tr.classList.toggle('row-sel', cb.checked);
+          sincronizarTodos(); pintarPie(); api.onSelect && api.onSelect(st.selected);
+        });
+        const all = U.$('.sel-all', container);
+        if (all) {
+          sincronizarTodos();
+          all.onchange = () => {
+            data.forEach((r) => all.checked ? st.selected.add(rowKey(r)) : st.selected.delete(rowKey(r)));
+            U.$$('.sel-one', tbody).forEach((cb) => { cb.checked = all.checked; cb.closest('tr').classList.toggle('row-sel', all.checked); });
+            pintarPie(); api.onSelect && api.onSelect(st.selected);
+          };
+        }
       }
     }
+
     const api = {
       setRows(r) { rows = r; const keys = new Set(r.map(rowKey)); [...st.selected].forEach((k) => { if (!keys.has(k)) st.selected.delete(k); }); draw(); },
       selected: () => st.selected, clearSelection() { st.selected.clear(); draw(); }, redraw: draw,

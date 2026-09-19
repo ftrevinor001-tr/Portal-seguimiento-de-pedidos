@@ -5,7 +5,8 @@
 
   APP.register = (name, view) => { APP.views[name] = view; };
   APP.NAV = [
-    { k: 'seguimiento', label: 'Seguimiento' },
+    { k: 'sobrepedido', label: 'Sobrepedido' },
+    { k: 'entregas', label: 'Entregas directas' },
     { k: 'calendario', label: 'Calendario E. Directas' },
     { k: 'tickets', label: 'Tickets' },
     { k: 'compradores', label: 'Compradores' },
@@ -135,8 +136,10 @@
   }
 
   APP.go = function () {
-    const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'seguimiento';
-    const view = APP.views[name] || APP.views.seguimiento;
+    let name = (location.hash.match(/^#\/(\w+)/) || [])[1] || 'sobrepedido';
+    if (name === 'seguimiento') { location.hash = '#/sobrepedido'; return; } // compatibilidad con la pestaña anterior
+    const view = APP.views[name] || APP.views.sobrepedido;
+    if (!APP.views[name]) name = 'sobrepedido';
     APP.current = name;
     U.$$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === name));
     const c = U.$('#view'); c.innerHTML = ''; c.className = '';
