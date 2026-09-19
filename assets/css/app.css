@@ -336,3 +336,11 @@ details.grp summary > b { color: var(--brand-1); }
 .card-resumen { padding: 10px 14px; } .card-resumen .kpis { margin-top: 10px; }
 .grid td.trunc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .grid tr:hover td.trunc { white-space: normal; }
+
+/* v1.5.2 · Entregas atrasadas en el calendario */
+.cal-cell.cal-atraso { border-color: var(--critical); box-shadow: inset 4px 0 0 var(--critical); }
+.cal-atr { margin-top: 4px; font-size: 11px; font-weight: 800; color: var(--critical); }
+.sw.sw-atraso { background: #fff; border: 2px solid var(--critical); box-shadow: inset 3px 0 0 var(--critical); }
+.day-kpis.day-atraso { border-color: #f2b8b8; }
+.line.line-atraso { border-left: 3px solid var(--critical); padding-left: 8px; }
+.line-top .badge { margin-left: 6px; }
