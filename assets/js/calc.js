@@ -143,6 +143,19 @@
     const v = C.ventana(p); if (!v.fin) return false;
     return v.ini <= U.monthEnd(anio, mes) && v.fin >= U.monthStart(anio, mes);
   };
+  /** v1.5.1 — El calendario cuenta la clave el día de su fecha estimada de llegada (fin de la ventana) */
+  C.llegaEnDia = (p, iso) => U.iso(p.fecha_estimada) === iso && !C.cancelado(p) && !U.iso(p.fecha_real_llegada);
+  /** Criterio anterior (se conserva para comparar con la app de Sheets): la ventana [inicio, fin] toca el día */
+  C.enVentana = function (p, iso) {
+    const v = C.ventana(p);
+    return !!v.fin && v.ini <= iso && v.fin >= iso && !C.cancelado(p) && !U.iso(p.fecha_real_llegada);
+  };
+  /** Claves cuya fecha estimada de llegada cae en el mes */
+  C.llegaEnMes = function (p, anio, mes) {
+    const f = U.iso(p.fecha_estimada);
+    return !!f && f.slice(0, 7) === `${anio}-${String(mes).padStart(2, '0')}`;
+  };
+
   C.mesSolicitud = function (p) {
     const fs = U.iso(p.fecha_solicitud);
     if (p.anio && p.mes && U.MESES.includes(up(p.mes))) return { anio: Number(p.anio), mes: U.MESES.indexOf(up(p.mes)) + 1 };
