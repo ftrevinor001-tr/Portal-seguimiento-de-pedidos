@@ -106,7 +106,7 @@ input[type="checkbox"] { width: auto; accent-color: var(--brand); }
 table.grid { border-collapse: collapse; width: 100%; font-size: 13px; }
 .grid th { position: sticky; top: 0; background: #f7f8fb; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; color: var(--ink-2); padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; cursor: default; }
 .grid th[data-k] { cursor: pointer; user-select: none; } .grid th[data-k]:hover { color: var(--brand-1); }
-.grid th.asc::after { content: " ▲"; font-size: 9px; } .grid th.desc::after { content: " ▼"; font-size: 9px; }
+.grid th.ord-asc::after { content: " ▲"; font-size: 9px; } .grid th.ord-desc::after { content: " ▼"; font-size: 9px; }
 .grid td { padding: 7px 10px; border-bottom: 1px solid var(--line-2); vertical-align: top; }
 .grid tr:last-child td { border-bottom: 0; }
 .grid tr.clickable { cursor: pointer; } .grid tr.clickable:hover td { background: #fff7f0; }
@@ -344,3 +344,13 @@ details.grp summary > b { color: var(--brand-1); }
 .day-kpis.day-atraso { border-color: #f2b8b8; }
 .line.line-atraso { border-left: 3px solid var(--critical); padding-left: 8px; }
 .line-top .badge { margin-left: 6px; }
+
+/* v1.6.0 · Tablas como hoja de Excel: sin paginador, desplazamiento continuo */
+.pager-pos { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.grid tbody tr { background: #fff; }
+.grid tbody tr:nth-child(even) { background: #fafbfc; }
+.grid.lock-first td.col-fija { background: inherit; }
+.vista-fija .card-tabla .pager { padding: 8px 2px 0; }
+.table-wrap.alto { scrollbar-gutter: stable; }
+.card-filtros .card-head.compacta { padding-bottom: 6px; margin-bottom: 2px; }
+.card-resumen .resumen-toggle { min-height: 26px; }
