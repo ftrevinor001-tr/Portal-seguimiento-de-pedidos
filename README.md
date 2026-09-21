@@ -4,7 +4,7 @@ Aplicación web del Área de Compras para dar seguimiento a **sobrepedidos, entr
 
 - **Sobrepedido** y **Entregas directas**: una pestaña para cada módulo, con tabla, filtros, alertas y KPIs. Permiten editar una clave, editar varias a la vez, dar de baja o restaurar, y descargar a Excel. Las tablas se ven como una hoja de Excel: al bajar con el scroll se agregan los renglones siguientes (no hay botón "Siguiente").
 - **Nuevo pedido**: captura por folio. El tiempo de entrega y el de descarga se toman de los catálogos. Las claves se capturan a mano o se cargan desde un CSV o Excel.
-- **Tickets**: las seis etapas de cada ticket (asignación, cotización, recotización, autorización, pago y llegada) con las alertas de cotización y de compra del reporte. Ver [`docs/reglas-de-calculo.md`](docs/reglas-de-calculo.md).
+- **Tickets**: las seis etapas de cada ticket (asignación, cotización, recotización, autorización, pago y llegada) con las alertas de cotización y de compra del reporte. Las etapas 1 a 5 se miden en **horas hábiles** (8:00-13:30 y 15:00-18:00 = 8.5 h, de lunes a viernes, sin días inhábiles), así que la fecha límite de cotización tiene fecha **y hora**. Ver [`docs/reglas-de-calculo.md`](docs/reglas-de-calculo.md).
 - **Calendario E. Directas**: folios, proveedores y horas de descarga por día, con nivel de carga y el detalle de cada día.
 - **Compradores**: composición del cumplimiento (dentro del plazo, fuera del plazo y pendientes vencidas) por comprador.
 - **Reporte mensual**: cumplimiento, clasificación de política y facturación/existencias. Se descarga a Excel.
