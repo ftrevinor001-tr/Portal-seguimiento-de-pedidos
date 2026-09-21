@@ -57,6 +57,8 @@
   // type: text | textarea | num | money | pct | date | datetime | select | bool ; list: nombre de lista ; mods: módulos donde aplica
   const ALL = ['SOBREPEDIDO', 'ENTREGA_DIRECTA', 'TICKET'];
   const SP = ['SOBREPEDIDO'], ED = ['ENTREGA_DIRECTA'], EDT = ['ENTREGA_DIRECTA', 'TICKET'], TK = ['TICKET'];
+  const SPED = ['SOBREPEDIDO', 'ENTREGA_DIRECTA']; // v1.9.0: campos que los tickets no usan
+  const LLEGADA_TK = '6 · Llegada del artículo';
   S.FIELDS = [
     { k: 'tipo_solicitud', label: 'Tipo de solicitud', type: 'select', list: 'TIPO_SOLICITUD', mods: ALL, sec: 'Solicitud' },
     { k: 'folio_pedido', label: 'Folio del pedido', type: 'text', mods: ALL, sec: 'Solicitud' },
@@ -75,30 +77,30 @@
     { k: 'unidad', label: 'Unidad', type: 'text', list: 'UNIDAD', mods: ALL, sec: 'Artículo' },
     { k: 'cantidad_solicitada', label: 'Cantidad solicitada', type: 'num', mods: ALL, sec: 'Artículo' },
     { k: 'proveedor', label: 'Proveedor', type: 'text', list: 'PROVEEDOR', mods: ALL, sec: 'Artículo' },
-    { k: 'tipo_material', label: 'Tipo de material', type: 'text', list: 'TIPO_MATERIAL', mods: EDT, sec: 'Artículo' },
+    { k: 'tipo_material', label: 'Tipo de material', type: 'text', list: 'TIPO_MATERIAL', mods: ED, sec: 'Artículo' },
 
-    { k: 'fecha_solicitud', label: 'Fecha de solicitud', type: 'datetime', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'tiempo_entrega', label: 'Tiempo de entrega (texto)', type: 'text', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'dias_inicio', label: 'Días A (inicio)', type: 'num', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'dias_fin', label: 'Días B (fin)', type: 'num', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'tipo_dias', label: 'Tipo de días', type: 'select', list: 'TIPO_DIAS', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'fecha_estimada_inicio', label: 'Fecha estimada inicio', type: 'date', mods: EDT, sec: 'Tiempos de entrega' },
-    { k: 'fecha_estimada', label: 'Fecha estimada de llegada (fin)', type: 'date', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'fecha_estimada_manual', label: 'Fecha estimada capturada a mano', type: 'bool', mods: ALL, sec: 'Tiempos de entrega' },
+    { k: 'fecha_solicitud', label: 'Fecha de solicitud', type: 'datetime', mods: ALL, sec: 'Tiempos de entrega', tk: { label: 'Fecha y hora de solicitud', sec: 'Solicitud' } },
+    { k: 'tiempo_entrega', label: 'Tiempo de entrega (texto)', type: 'text', mods: ALL, sec: 'Tiempos de entrega', tk: { label: 'Tiempo de entrega del proveedor', sec: LLEGADA_TK } },
+    { k: 'dias_inicio', label: 'Días A (inicio)', type: 'num', mods: SPED, sec: 'Tiempos de entrega' },
+    { k: 'dias_fin', label: 'Días B (fin)', type: 'num', mods: ALL, sec: 'Tiempos de entrega', tk: { label: 'Días de entrega del proveedor', sec: LLEGADA_TK } },
+    { k: 'tipo_dias', label: 'Tipo de días', type: 'select', list: 'TIPO_DIAS', mods: ALL, sec: 'Tiempos de entrega', tk: { sec: LLEGADA_TK } },
+    { k: 'fecha_estimada_inicio', label: 'Fecha estimada inicio', type: 'date', mods: ED, sec: 'Tiempos de entrega' },
+    { k: 'fecha_estimada', label: 'Fecha estimada de llegada (fin)', type: 'date', mods: ALL, sec: 'Tiempos de entrega', tk: { label: 'Fecha estimada de llegada (pago + días del proveedor)', sec: LLEGADA_TK } },
+    { k: 'fecha_estimada_manual', label: 'Fecha estimada capturada a mano', type: 'bool', mods: SPED, sec: 'Tiempos de entrega' },
     { k: 'te_especial_comprador', label: 'TE especial solicitado por comprador', type: 'date', mods: ED, sec: 'Tiempos de entrega' },
-    { k: 'tiempo_descarga_horas', label: 'Tiempo de descarga (horas)', type: 'num', mods: EDT, sec: 'Tiempos de entrega' },
-    { k: 'fecha_real_llegada', label: 'Fecha real de llegada', type: 'date', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'fecha_compromiso', label: 'Fecha compromiso', type: 'date', mods: ALL, sec: 'Tiempos de entrega' },
-    { k: 'fecha_compromiso_nota', label: 'Nota de fecha compromiso', type: 'text', mods: ALL, sec: 'Tiempos de entrega' },
+    { k: 'tiempo_descarga_horas', label: 'Tiempo de descarga (horas)', type: 'num', mods: ED, sec: 'Tiempos de entrega' },
+    { k: 'fecha_real_llegada', label: 'Fecha real de llegada', type: 'date', mods: ALL, sec: 'Tiempos de entrega', tk: { label: 'Fecha real de llegada a SANVER', sec: LLEGADA_TK } },
+    { k: 'fecha_compromiso', label: 'Fecha compromiso', type: 'date', mods: SPED, sec: 'Tiempos de entrega' },
+    { k: 'fecha_compromiso_nota', label: 'Nota de fecha compromiso', type: 'text', mods: SPED, sec: 'Tiempos de entrega' },
     { k: 'directo_sanver', label: 'Directo Sanver', type: 'select', list: 'DIRECTO_SANVER', mods: ED, sec: 'Tiempos de entrega' },
-    { k: 'tipo_directo', label: 'Tipo directo', type: 'text', mods: EDT, sec: 'Tiempos de entrega' },
-    { k: 'alerta_id_oc', label: 'Alerta ID (OC)', type: 'select', list: 'ALERTA_OC', mods: EDT, sec: 'Tiempos de entrega' },
+    { k: 'tipo_directo', label: 'Tipo directo', type: 'text', mods: ED, sec: 'Tiempos de entrega' },
+    { k: 'alerta_id_oc', label: 'Alerta ID (OC)', type: 'select', list: 'ALERTA_OC', mods: ED, sec: 'Tiempos de entrega' },
 
     // Etapas del ticket (v1.3.0 — REPORTE DE TICKETS). Se capturan por folio: al guardar se aplican a todas las claves del ticket.
     { k: 'fecha_asignacion', label: 'Fecha y hora de asignación', type: 'datetime', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'asignado_por', label: 'Asignado por (jefe de área)', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'categoria_ticket', label: 'Categoría de la cotización', type: 'select', list: 'CATEGORIA', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'fecha_limite_cotizacion', label: 'Fecha límite de cotización (manual, opcional)', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'categoria_ticket', label: 'Categoría del ticket (define el tiempo de cotización)', type: 'select', list: 'CATEGORIA', mods: TK, sec: 'Solicitud', folio: true },
+    { k: 'fecha_limite_cotizacion', label: 'Fecha límite de cotización (solo si no hay categoría)', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'fecha_cotizacion_usuario', label: 'Fecha de entrega de la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'vigencia_dias', label: 'Vigencia de la cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'fecha_vence_cotizacion', label: 'Vence la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
@@ -110,13 +112,13 @@
     { k: 'nota_etapas', label: 'Nota de seguimiento del ticket', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
 
     { k: 'folio_factura', label: 'Folio de factura', type: 'text', mods: ED, sec: 'Facturación' },
-    { k: 'fecha_facturacion', label: 'Fecha de facturación', type: 'date', mods: ALL, sec: 'Facturación' },
-    { k: 'estatus_facturacion', label: 'Estatus facturación (capturado)', type: 'select', list: 'ESTATUS_FACT', mods: ALL, sec: 'Facturación' },
-    { k: 'fecha_facturacion_1', label: 'Fecha facturación 1ra entrega', type: 'date', mods: EDT, sec: 'Facturación' },
-    { k: 'cantidad_entregada', label: 'Cantidad entregada 1ra', type: 'num', mods: EDT, sec: 'Facturación' },
-    { k: 'fecha_facturacion_2', label: 'Fecha facturación 2da entrega', type: 'date', mods: EDT, sec: 'Facturación' },
-    { k: 'cantidad_entregada_2', label: 'Cantidad entregada 2da', type: 'num', mods: EDT, sec: 'Facturación' },
-    { k: 'validacion_telemarketing', label: 'Validación telemarketing', type: 'text', mods: EDT, sec: 'Facturación' },
+    { k: 'fecha_facturacion', label: 'Fecha de facturación', type: 'date', mods: SPED, sec: 'Facturación' },
+    { k: 'estatus_facturacion', label: 'Estatus facturación (capturado)', type: 'select', list: 'ESTATUS_FACT', mods: SPED, sec: 'Facturación' },
+    { k: 'fecha_facturacion_1', label: 'Fecha facturación 1ra entrega', type: 'date', mods: ED, sec: 'Facturación' },
+    { k: 'cantidad_entregada', label: 'Cantidad entregada 1ra', type: 'num', mods: ED, sec: 'Facturación' },
+    { k: 'fecha_facturacion_2', label: 'Fecha facturación 2da entrega', type: 'date', mods: ED, sec: 'Facturación' },
+    { k: 'cantidad_entregada_2', label: 'Cantidad entregada 2da', type: 'num', mods: ED, sec: 'Facturación' },
+    { k: 'validacion_telemarketing', label: 'Validación telemarketing', type: 'text', mods: ED, sec: 'Facturación' },
 
     { k: 'validacion_clasificacion', label: 'Clasificación de política', type: 'select', list: 'CLASIF_POLITICA', mods: SP, sec: 'Política de documentación' },
     { k: 'cuenta_cotizacion', label: 'Cuenta con cotización', type: 'select', list: 'SINO', mods: SP, sec: 'Política de documentación' },
@@ -130,7 +132,14 @@
     { k: 'observaciones', label: 'Observaciones', type: 'textarea', mods: ALL, sec: 'Comentarios' },
   ];
   S.FIELD = Object.fromEntries(S.FIELDS.map((f) => [f.k, f]));
-  S.fieldsFor = (modulo) => S.FIELDS.filter((f) => f.mods.includes(modulo));
+  // En tickets algunos campos cambian de nombre y de sección (v1.9.0); el orden de las secciones sigue el flujo del ticket
+  const ORDEN_TK = ['Solicitud', 'Artículo', 'Etapas del ticket', LLEGADA_TK];
+  S.fieldsFor = (modulo) => {
+    const fs = S.FIELDS.filter((f) => f.mods.includes(modulo)).map((f) => (modulo === 'TICKET' && f.tk ? { ...f, ...f.tk } : f));
+    if (modulo !== 'TICKET') return fs;
+    const pos = (f) => { const i = ORDEN_TK.indexOf(f.sec); return i < 0 ? 99 : i; };
+    return fs.map((f, i) => ({ f, i })).sort((a, b) => pos(a.f) - pos(b.f) || a.i - b.i).map((x) => x.f);
+  };
 
   /** Convierte un valor capturado al tipo de la base de datos */
   S.coerce = function (k, v) {
@@ -155,7 +164,11 @@
   };
   S.lista = function (name, modulo) {
     if (name === 'STATUS') return modulo ? C.STATUS[modulo] : U.uniq([...C.STATUS.SOBREPEDIDO, ...C.STATUS.ENTREGA_DIRECTA]);
-    if (name === 'CATEGORIA') return U.sortEs(U.uniq([...S.categorias(), ...S.pedidos.filter((p) => p.categoria_ticket).map((p) => p.categoria_ticket)]));
+    if (name === 'CATEGORIA') {
+      const cat = S.categorias(), llaves = new Set(cat.map(U.norm));
+      const extra = S.pedidos.filter((p) => p.categoria_ticket && !llaves.has(U.norm(p.categoria_ticket))).map((p) => p.categoria_ticket);
+      return U.sortEs(U.uniq([...cat, ...extra]));
+    }
     if (FIXED[name]) return FIXED[name];
     const vals = new Set();
     for (const l of S.cat.listas) if (l.activo !== false && l.lista === name && (!modulo || !l.modulo || l.modulo === modulo)) vals.add(l.valor);
@@ -302,7 +315,36 @@
   /* Catálogos */
   S.CAT_TABLES = { te: 'sp_cat_tiempo_entrega', td: 'sp_cat_tiempo_descarga', dnr: 'sp_cat_dias_no_recepcion', inh: 'sp_cat_dias_inhabiles', listas: 'sp_cat_listas', cats: 'sp_cat_categorias_ticket' };
   /** Categorías de cotización activas (para los desplegables) */
-  S.categorias = () => (S.cat.cats || []).filter((c) => c.activo !== false).map((c) => c.categoria).sort((a, b) => a.localeCompare(b, 'es'));
+  // v1.9.0: la misma categoría escrita con y sin acentos cuenta una sola vez (se queda la que tiene acentos)
+  const acentos = (t) => (String(t).match(/[ÁÉÍÓÚÜÑ]/gi) || []).length;
+  S.catsUnicas = function () {
+    const m = new Map();
+    for (const c of (S.cat.cats || []).filter((x) => x.activo !== false)) {
+      const k = U.norm(c.categoria), prev = m.get(k);
+      if (!prev || acentos(c.categoria) > acentos(prev.categoria)) m.set(k, c);
+    }
+    return [...m.values()].sort((a, b) => a.categoria.localeCompare(b.categoria, 'es'));
+  };
+  S.categorias = () => S.catsUnicas().map((c) => c.categoria);
+  /** Categorías repetidas (misma categoría con y sin acentos): {quedan, sobran} */
+  S.categoriasRepetidas = function () {
+    const buenas = new Map(S.catsUnicas().map((c) => [U.norm(c.categoria), c]));
+    const sobran = (S.cat.cats || []).filter((c) => c.activo !== false && buenas.get(U.norm(c.categoria)) !== c);
+    return { buenas, sobran };
+  };
+  /** Desactiva las repetidas y pasa los tickets que las usan a la escritura que se queda */
+  S.limpiarCategoriasRepetidas = async function () {
+    requireUser();
+    const { buenas, sobran } = S.categoriasRepetidas();
+    if (!sobran.length) return { desactivadas: 0, tickets: 0 };
+    await API.update('sp_cat_categorias_ticket', [['id', 'in', sobran.map((c) => c.id)]], { activo: false, actualizado_por: S.user });
+    const cambiar = S.pedidos.filter((p) => p.modulo === 'TICKET' && p.categoria_ticket && buenas.has(U.norm(p.categoria_ticket)) && buenas.get(U.norm(p.categoria_ticket)).categoria !== p.categoria_ticket);
+    const porCat = U.groupBy(cambiar, (p) => buenas.get(U.norm(p.categoria_ticket)).categoria);
+    for (const [cat, ps] of porCat.entries()) await S.updateMany(ps.map((p) => p.id), { categoria_ticket: cat });
+    await S.loadCatalogos();
+    S.emit('data');
+    return { desactivadas: sobran.length, tickets: cambiar.length };
+  };
   S.saveCat = async function (key, row) {
     requireUser();
     const table = S.CAT_TABLES[key];

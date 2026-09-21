@@ -170,7 +170,8 @@
       window.addEventListener('scroll', alScroll, { passive: true }); // por si la pantalla es angosta y se desplaza la página
 
       if (onRow) tbody.addEventListener('click', (e) => {
-        if (e.target.closest('.sel')) return;
+        // Los controles dentro de la celda (casillas, listas, ligas) no abren el detalle
+        if (e.target.closest('.sel, select, input, button, a, label, textarea')) return;
         const tr = e.target.closest('tr[data-id]'); if (!tr) return;
         const r = porClave.get(tr.dataset.id); if (r) onRow(r);
       });

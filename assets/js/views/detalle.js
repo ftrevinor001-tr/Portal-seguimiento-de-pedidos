@@ -15,7 +15,9 @@
     const alertas = `<div class="etapas-alertas">
       <span class="badge badge-${cls(t.alertaCotizacion)}">Cotización: ${U.esc(t.alertaCotizacion)}</span>
       <span class="badge badge-${cls(t.alertaCompra)}">Compra: ${U.esc(t.alertaCompra)}</span>
-      ${t.limite ? `<span class="muted small">Límite de cotización: <b>${U.fmtDateTime(t.limite)}</b>${t.limiteCalculado && t.horasCotizacion ? ` (${C.textoHoras(t.horasCotizacion)} h hábiles desde la solicitud)` : ''}</span>` : ''}
+      ${t.origenLimite === 'CATEGORIA' ? `<span class="muted small">Límite de cotización: <b>${U.fmtDateTime(t.limite)}</b> (${U.esc(p.categoria_ticket)}: ${t.categoriaDias} día(s) = ${C.textoHoras(t.horasCotizacion)} h hábiles)</span>`
+        : t.origenLimite === 'MANUAL' ? `<span class="muted small">Límite de cotización: <b>${U.fmtDateTime(t.limite)}</b> (fecha capturada; elige la categoría para calcularlo por horas)</span>`
+        : '<span class="badge badge-warning">Sin categoría: elige la categoría del ticket para calcular el tiempo de cotización</span>'}
       ${t.restanteCotizacion === null || t.restanteCotizacion === undefined ? '' : t.restanteCotizacion < 0
         ? `<span class="badge badge-critical">Vencida hace ${C.textoHoras(-t.restanteCotizacion)} h hábiles</span>`
         : `<span class="badge badge-${t.restanteCotizacion <= C.horasDia() ? 'warning' : 'ok'}">Faltan ${C.textoHoras(t.restanteCotizacion)} h hábiles</span>`}
@@ -26,7 +28,7 @@
       <div class="etapas-row etapas-6">${t.etapas.map((e) => `<div class="etapa ${clase(e)}" title="${U.esc(e.desc)} · ${U.esc(e.quien)}">
         <div class="et-n">${e.n}</div><div class="et-lb">${U.esc(e.label)}</div>
         <div class="et-d">${dias(e)}</div>
-        <div class="et-st">${e.estado === 'INACTIVA' ? 'Se activa si vence' : e.estado === 'HECHA' ? `meta ${e.meta}${e.unidad === 'h' ? ' h' : ' d'}` : e.estado.toLowerCase()}</div>
+        <div class="et-st">${e.estado === 'INACTIVA' ? 'Se activa si vence' : e.estado === 'HECHA' ? (e.meta === null || e.meta === undefined ? 'sin meta (falta categoría)' : `meta ${e.unidad === 'h' ? C.textoHoras(e.meta) + ' h' : e.meta + ' d'}`) : e.estado.toLowerCase()}</div>
       </div>`).join('')}</div>
       ${alertas}
       <div class="etapas-pie"><b>${U.esc(t.actual)}</b> · ${t.total === null ? '' : `${t.total} días hábiles desde que se levantó el ticket`}</div>
@@ -35,6 +37,8 @@
 
   function resumen(p) {
     const chip = (l, v) => `<div class="chip"><span>${U.esc(l)}</span><b>${v === '' || v === null || v === undefined ? '—' : v}</b></div>`;
+    // v1.9.0: en tickets los indicadores de pedido (existencia, facturación, clasificación…) no aplican; manda el panel de etapas
+    if (p.modulo === 'TICKET') return etapasHTML(p);
     return `<div class="chips">
       ${chip('Días naturales', U.esc(p._dias_naturales ?? ''))}
       ${chip('Días incumplimiento', U.esc(p._incumplimiento))}
@@ -83,15 +87,23 @@
     };
     const markDirty = () => { U.$('.dirty', d.el).hidden = !Object.keys(cambios()).length; };
 
+    // Tickets: la fecha estimada se calcula con el pago (o autorización) + días del proveedor, salvo que se capture a mano
+    const esTk = p.modulo === 'TICKET';
+    let manualTk = !!(p.fecha_estimada_manual && U.iso(p.fecha_estimada));
+    const setVal = (name, val) => { const el = form.querySelector(`[name="${name}"]`); if (el && val !== undefined && val !== null) el.value = val; };
     // Recalcular fecha estimada si no es manual
     form.addEventListener('change', (e) => {
       const k = e.target.name;
-      if (k === 'fecha_estimada' || k === 'fecha_estimada_inicio') { const man = form.querySelector('[name="fecha_estimada_manual"]'); if (man) man.checked = true; }
+      if (k === 'fecha_estimada' || k === 'fecha_estimada_inicio') { const man = form.querySelector('[name="fecha_estimada_manual"]'); if (man) man.checked = true; if (esTk) manualTk = !!e.target.value; }
       if (k === 'tiempo_entrega') {
         const t = C.parseTiempoEntrega(e.target.value);
-        if (t.ini !== null) { form.querySelector('[name="dias_inicio"]').value = t.ini; form.querySelector('[name="dias_fin"]').value = t.fin; if (t.tipo) form.querySelector('[name="tipo_dias"]').value = t.tipo; }
+        if (t.ini !== null) { setVal('dias_inicio', t.ini); setVal('dias_fin', t.fin); if (t.tipo) setVal('tipo_dias', t.tipo); }
       }
-      if (RECALC_KEYS.includes(k) || k === 'tiempo_entrega' || k === 'fecha_estimada_manual') {
+      if (esTk && ['fecha_pago_proveedor', 'fecha_autorizacion_compra', 'dias_fin', 'tipo_dias', 'tiempo_entrega'].includes(k) && !manualTk) {
+        const fe = C.fechaEstimadaTicket({ ...p, ...valores() }, S.hol);
+        if (fe) { setVal('fecha_estimada', fe); UI.toast(`Fecha estimada de llegada: ${U.fmtDate(fe)} (pago o autorización + días del proveedor)`, 'info', 4000); }
+      }
+      if (!esTk && (RECALC_KEYS.includes(k) || k === 'tiempo_entrega' || k === 'fecha_estimada_manual')) {
         const v = valores();
         if (!v.fecha_estimada_manual) {
           const fe = C.fechasEstimadas({ ...p, ...v }, S.hol);
@@ -187,6 +199,8 @@
         // Las etapas del ticket se guardan en todas las claves del folio; lo demás solo en esta clave
         const folio = {}, propio = {};
         for (const [k, v] of Object.entries(ch)) (esTicket && camposFolio.includes(k) ? folio : propio)[k] = v;
+        // En tickets la casilla "capturada a mano" no se ve: se marca sola según cómo se obtuvo la fecha
+        if (esTicket && 'fecha_estimada' in ch) propio.fecha_estimada_manual = manualTk;
         let msg = '';
         if (Object.keys(folio).length) { const n = await S.updateFolio(p, folio); msg = ` · etapas aplicadas a ${n} clave(s) del folio`; }
         if (Object.keys(propio).length) await S.updatePedido(p.id, propio);

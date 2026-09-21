@@ -39,7 +39,7 @@
       if (st.mes && String(r.mes) !== String(st.mes)) return false;
       if (st.comprador && r.comprador !== st.comprador) return false;
       if (st.solicitante && r.solicitante !== st.solicitante) return false;
-      if (st.categoria && r.categoria !== st.categoria) return false;
+      if (st.categoria === SIN_CAT ? !!r.categoria : (st.categoria && U.norm(r.categoria) !== U.norm(st.categoria))) return false;
       if (st.etapa && r.etapa !== st.etapa) return false;
       if (st.estatus && U.norm(r.estatus) !== st.estatus) return false;
       if (st.desde && (!r.fecha_solicitud || r.fecha_solicitud < st.desde)) return false;
@@ -51,12 +51,27 @@
     });
   }
 
+  /* v1.9.0 · Categoría del ticket: define las horas de cotización (catálogo Categorías de tickets) */
+  const SIN_CAT = '__SIN__';
+  const opcionesCategoria = (actual) => {
+    const cats = S.catsUnicas();
+    const ops = cats.map((c) => `<option value="${U.esc(c.categoria)}" ${U.norm(c.categoria) === U.norm(actual) ? 'selected' : ''}>${U.esc(c.categoria)} · ${c.dias} d</option>`);
+    if (actual && !cats.some((c) => U.norm(c.categoria) === U.norm(actual))) ops.unshift(`<option value="${U.esc(actual)}" selected>${U.esc(actual)} (no está en el catálogo)</option>`);
+    return `<option value="">— Elegir categoría —</option>${ops.join('')}`;
+  };
+  function celdaCategoria(r) {
+    if (S.puedeEditar()) return `<select class="cat-sel ${r.categoria ? '' : 'cat-falta'}" data-cat="${r.p.id}" title="La categoría define las horas de cotización">${opcionesCategoria(r.categoria)}</select>`;
+    if (!r.categoria) return '<span class="badge badge-warning" title="Sin categoría no se calcula el tiempo de cotización">SIN CATEGORÍA</span>';
+    const d = C.diasCategoria(r.categoria, S.cat.cats);
+    return `<span class="trunc-in" title="${U.esc(r.categoria)}">${U.esc(r.categoria)}</span>${d !== null ? ` <span class="muted small">· ${d} d</span>` : ''}`;
+  }
+
   const celda = (r, k) => {
     const e = r.t.etapas.find((x) => x.k === k);
     if (!e || e.dias === null) return e && e.estado === 'INACTIVA' ? '<span class="muted" title="Se activa si la cotización vence sin autorización">—</span>' : '<span class="muted">—</span>';
-    const cls = e.estado === 'HECHA' ? (e.cumple ? 'dias-ok' : 'dias-mal') : (e.cumple ? 'dias-curso' : 'dias-tarde');
+    const cls = e.cumple === null ? 'dias-curso' : e.estado === 'HECHA' ? (e.cumple ? 'dias-ok' : 'dias-mal') : (e.cumple ? 'dias-curso' : 'dias-tarde');
     const val = e.unidad === 'h' ? C.textoHoras(e.dias) : e.dias;
-    const meta = e.unidad === 'h' ? `${e.meta} h` : `${e.meta} días hábiles`;
+    const meta = e.meta === null || e.meta === undefined ? 'sin meta: falta la categoría' : e.unidad === 'h' ? `${C.textoHoras(e.meta)} h hábiles` : `${e.meta} días hábiles`;
     return `<span class="dias ${cls}" title="${U.esc(e.label)}: ${e.estado.toLowerCase()} · meta ${meta}">${val}${e.estado === 'EN CURSO' ? '…' : ''}</span>`;
   };
 
@@ -68,7 +83,7 @@
     { k: 'solicitante', label: 'Solicitante', cls: 'trunc', width: '130px' },
     { k: 'comprador', label: 'Comprador', cls: 'trunc', width: '140px' },
     { k: 'descripcion', label: 'Descripción', cls: 'desc trunc', width: '260px' },
-    { k: 'categoria', label: 'Categoría', cls: 'trunc', width: '150px' },
+    { k: 'categoria', label: 'Categoría', width: '210px', render: (r) => celdaCategoria(r) },
     { k: 'f_sol', label: 'F. solicitud', cls: 'nowrap', render: (r) => U.fmtDate(r.f_sol) },
     { k: 'h_sol', label: 'Hora solicitud', cls: 'nowrap' },
     { k: 'f_asig', label: 'F. asignación', cls: 'nowrap', render: (r) => U.fmtDate(r.f_asig) },
@@ -125,7 +140,7 @@
     return `<section class="card"><div class="card-head"><h2>Tiempo por etapa</h2><p class="muted">Las etapas 1 a 5 se miden en <b>horas hábiles</b> (jornada de 8:00 a 13:30 y de 15:00 a 18:00 = 8.5 h, de lunes a viernes, sin días inhábiles); la llegada del proveedor sigue en días. Los días de cotización de cada categoría se convierten a horas (1 día = 8.5 h) y se ajustan en Catálogos → Categorías de tickets; las metas, en <code>config.js</code> con <code>METAS_TICKET</code>.</p></div>
       <div class="table-wrap"><table class="grid"><thead><tr><th>Etapa</th><th>Se mide</th><th>Responsable</th><th class="num">Meta</th><th class="num">Tickets medidos</th><th class="num">Promedio</th><th class="num">Máximo</th><th class="num">Dentro de meta</th><th class="num">En curso</th></tr></thead><tbody>
       ${filas.map((f) => `<tr><td><b>${f.def.n}. ${U.esc(f.def.label)}</b></td><td class="muted">${U.esc(f.def.desc)}</td><td>${U.esc(f.def.quien)}</td>
-        <td class="num">${f.meta}${f.def.unidad === 'h' ? ' h' : ' d'}</td><td class="num">${U.fmtNum(f.n)}</td>
+        <td class="num">${f.def.k === 'cotizacion' ? 'según categoría' : `${f.meta}${f.def.unidad === 'h' ? ' h' : ' d'}`}</td><td class="num">${U.fmtNum(f.n)}</td>
         <td class="num"><b>${fmt(f.def, f.prom)}</b></td><td class="num">${fmt(f.def, f.max)}</td>
         <td class="num">${f.pct === null ? '—' : `<span class="badge badge-${f.pct >= 0.8 ? 'ok' : f.pct >= 0.5 ? 'warning' : 'critical'}">${U.fmtPct(f.pct, f.pct === 1 ? 0 : 1)}</span>`}</td>
         <td class="num">${U.fmtNum(f.curso)}</td></tr>`).join('')}
@@ -149,7 +164,8 @@
     const cnt = (e) => rows.filter((r) => r.etapa === e).length;
     const cotFuera = rows.filter((r) => r.alerta_cot === 'FUERA DEL PLAZO').length;
     // v1.8.0: el resumen corto vive en el pie de la tabla
-    mini = `<b>${U.fmtNum(rows.length)}</b> tickets · <b>${U.fmtNum(cnt('POR ASIGNAR'))}</b> por asignar · <b class="${cotFuera ? 'error' : ''}">${U.fmtNum(cotFuera)}</b> cotización fuera de plazo · <b>${U.fmtNum(cnt('ENTREGADO'))}</b> entregados
+    const sinCat = rows.filter((r) => !r.categoria).length;
+    mini = `<b>${U.fmtNum(rows.length)}</b> tickets · <b>${U.fmtNum(cnt('POR ASIGNAR'))}</b> por asignar · <b class="${cotFuera ? 'error' : ''}">${U.fmtNum(cotFuera)}</b> cotización fuera de plazo · <b>${U.fmtNum(cnt('ENTREGADO'))}</b> entregados${sinCat ? ` · <a href="#" data-sincat="1" title="Ver solo los tickets sin categoría">${U.fmtNum(sinCat)} sin categoría</a>` : ''}
       <button class="btn btn-sm btn-ghost" data-resumen="1">${abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾'}</button>`;
     if (abierto) {
       U.$('#tkKpis', root).innerHTML = kpis(rows);
@@ -169,7 +185,7 @@
       { k: 'etapa', label: 'Etapa', options: () => C.ETAPAS_FLUJO_TICKET.concat(['CANCELADO']) },
       { k: 'alerta_cot', label: 'Alerta cotización', options: () => C.ALERTAS_TICKET },
       { k: 'solicitante', label: 'Solicitante', more: true, options: () => S.lista('SOLICITANTE', 'TICKET') },
-      { k: 'categoria', label: 'Categoría', more: true, options: () => S.lista('CATEGORIA'), wide: true },
+      { k: 'categoria', label: 'Categoría', more: true, options: () => [{ value: SIN_CAT, label: '(Sin categoría)' }, ...S.lista('CATEGORIA')], wide: true },
       { k: 'estatus', label: 'Estatus', more: true, options: () => C.STATUS.TICKET },
       { k: 'alerta_compra', label: 'Alerta compra', more: true, options: () => C.ALERTAS_TICKET },
       { k: 'desde', label: 'Solicitud desde', more: true, type: 'date' },
@@ -239,7 +255,23 @@
       try { abierto = localStorage.getItem('sp_tk_resumen') === '1'; } catch { /* sin storage */ }
       U.$('#tkResumen', c).hidden = !abierto;
       // El botón "Ver resumen" está en el pie de la tabla (se vuelve a pintar), por eso se escucha en el contenedor
+      // Cambio de categoría directo en la tabla: se guarda en todas las claves del ticket
+      U.$('#tkTable', c).addEventListener('change', async (e) => {
+        const sel = e.target.closest('select[data-cat]'); if (!sel) return;
+        const p = S.byId(Number(sel.dataset.cat)); if (!p) return;
+        if (!APP.requiereEdicion('Para asignar la categoría del ticket necesitas la contraseña.')) { sel.value = p.categoria_ticket || ''; return; }
+        const cat = sel.value || null;
+        sel.disabled = true;
+        try {
+          const n = await S.updateFolio(p, { categoria_ticket: cat });
+          const q = S.byId(p.id) || p;
+          const lim = C.fechaLimiteCotizacion(q, S.cat.cats, S.hol);
+          const d = C.diasCategoria(cat, S.cat.cats);
+          UI.toast(cat ? `Ticket ${p.folio_pedido}: ${cat} (${d} d = ${C.textoHoras(C.diasAHoras(d))} h hábiles) · límite ${U.fmtDateTime(lim)}${n > 1 ? ` · ${n} claves` : ''}` : `Ticket ${p.folio_pedido} sin categoría`);
+        } catch (er) { UI.toast(er.message, 'error'); sel.value = p.categoria_ticket || ''; sel.disabled = false; }
+      });
       U.$('#tkTable', c).addEventListener('click', (e) => {
+        if (e.target.closest('[data-sincat]')) { e.preventDefault(); st.categoria = SIN_CAT; filtros(); draw(); return; }
         if (!e.target.closest('[data-resumen]')) return;
         abierto = !abierto;
         try { localStorage.setItem('sp_tk_resumen', abierto ? '1' : '0'); } catch { /* sin storage */ }

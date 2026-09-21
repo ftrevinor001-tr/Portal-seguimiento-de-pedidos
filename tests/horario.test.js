@@ -50,8 +50,20 @@ eq('solicitud lunes 08:00 + 5 días → viernes 18:00',
   C.fechaLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', categoria_ticket: 'HERRAMIENTA' }), cats, hol), '2026-09-25T18:00:00');
 eq('sin categoría no hay fecha límite',
   C.fechaLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00' }), cats, hol), 'null');
-eq('la fecha capturada a mano manda (cierre del día)',
-  C.fechaLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', categoria_ticket: 'HERRAMIENTA', fecha_limite_cotizacion: '2026-09-22' }), cats, hol), '2026-09-22T18:00:00');
+// v1.9.0: manda la categoría; la fecha capturada solo aplica a tickets sin categoría (histórico)
+eq('con categoría, la categoría manda aunque haya fecha capturada',
+  C.fechaLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', categoria_ticket: 'HERRAMIENTA', fecha_limite_cotizacion: '2026-09-22' }), cats, hol), '2026-09-25T18:00:00');
+eq('sin categoría, se usa la fecha capturada (cierre del día)',
+  C.fechaLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', fecha_limite_cotizacion: '2026-09-22' }), cats, hol), '2026-09-22T18:00:00');
+eq('origen del límite: categoría', C.origenLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', categoria_ticket: 'HERRAMIENTA' }), cats), 'CATEGORIA');
+eq('origen del límite: manual', C.origenLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00', fecha_limite_cotizacion: '2026-09-22' }), cats), 'MANUAL');
+eq('origen del límite: ninguno', C.origenLimiteCotizacion(tk({ fecha_solicitud: '2026-09-21T08:00:00' }), cats), 'null');
+eq('categoría de 5 días: meta de cotización 42.5 h',
+  C.etapasTicket(tk({ fecha_solicitud: '2026-09-21T08:00:00', fecha_asignacion: '2026-09-21T09:00:00', categoria_ticket: 'HERRAMIENTA' }), '2026-09-21', hol, cats, '2026-09-21T10:00:00').etapas.find((e) => e.k === 'cotizacion').meta, 42.5);
+eq('sin categoría ni fecha: la cotización no tiene meta fija',
+  C.etapasTicket(tk({ fecha_solicitud: '2026-09-21T08:00:00', fecha_asignacion: '2026-09-21T09:00:00' }), '2026-09-21', hol, cats, '2026-09-21T10:00:00').etapas.find((e) => e.k === 'cotizacion').meta, 'null');
+eq('sin categoría con fecha capturada: meta = horas hábiles hasta esa fecha (lunes 8:00 → martes 18:00 = 17 h)',
+  C.etapasTicket(tk({ fecha_solicitud: '2026-09-21T08:00:00', fecha_asignacion: '2026-09-21T09:00:00', fecha_limite_cotizacion: '2026-09-22' }), '2026-09-21', hol, cats, '2026-09-21T10:00:00').etapas.find((e) => e.k === 'cotizacion').meta, 17);
 
 console.log('5) Alerta de cotización contra la hora');
 const base = { fecha_solicitud: '2026-09-21T08:00:00', categoria_ticket: 'LICENCIAS Y SOFTWARE' }; // límite: miércoles 23/09 18:00
@@ -81,6 +93,13 @@ eq('meta de cotización = 3 días × 8.5', et('cotizacion').meta, 25.5);
 eq('6 llegada sigue en días', et('entrega').unidad, 'd');
 eq('etapa actual', t.actual, 'ESPERA DEL USUARIO');
 eq('alerta de cotización', t.alertaCotizacion, 'FINALIZADO');
+
+console.log('7) Fecha estimada de llegada del ticket (v1.9.0)');
+eq('pago 22/09 + 5 días hábiles → 29/09', C.fechaEstimadaTicket({ fecha_pago_proveedor: '2026-09-22', dias_fin: 5, tipo_dias: 'HABILES' }, hol), '2026-09-29');
+eq('sin pago: autorización 21/09 + 10 naturales → 01/10', C.fechaEstimadaTicket({ fecha_autorizacion_compra: '2026-09-21', dias_fin: 10 }, hol), '2026-10-01');
+eq('el pago manda sobre la autorización', C.fechaEstimadaTicket({ fecha_autorizacion_compra: '2026-09-10', fecha_pago_proveedor: '2026-09-14', dias_fin: 1, tipo_dias: 'HABILES' }, hol), '2026-09-15');
+eq('pago 15/09 + 1 hábil con 16/09 inhábil → 17/09', C.fechaEstimadaTicket({ fecha_pago_proveedor: '2026-09-15', dias_fin: 1, tipo_dias: 'HABILES' }, hol), '2026-09-17');
+eq('sin pago ni autorización no hay fecha', C.fechaEstimadaTicket({ dias_fin: 10 }, hol), 'null');
 
 console.log(`\n${checks - fails} de ${checks} verificaciones OK`);
 process.exit(fails ? 1 : 0);

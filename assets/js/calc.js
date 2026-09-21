@@ -48,6 +48,16 @@
     };
   };
 
+  /**
+   * v1.9.0 · Fecha estimada de llegada de un TICKET: el proveedor empieza a contar cuando se le paga
+   * (o, si todavía no hay pago, desde la autorización de compra) + los días de entrega del proveedor.
+   */
+  C.fechaEstimadaTicket = function (p, hol) {
+    const base = U.iso(p.fecha_pago_proveedor) || U.iso(p.fecha_autorizacion_compra);
+    if (!base || p.dias_fin === null || p.dias_fin === undefined || p.dias_fin === '' || isNaN(p.dias_fin)) return null;
+    return C.sumarDias(base, Number(p.dias_fin), p.tipo_dias || 'NATURALES', hol);
+  };
+
   /** Status que corresponde a "ya llegó" según el módulo */
   C.statusLlegada = (modulo) => modulo === 'SOBREPEDIDO' ? 'FINALIZADO' : 'ENTREGADO';
   /**
@@ -322,11 +332,19 @@
    *   (y se entiende como el cierre de ese día).
    */
   C.fechaLimiteCotizacion = function (p, cats, hol) {
+    // v1.9.0: manda la CATEGORÍA. La fecha capturada a mano solo se usa si el ticket no tiene categoría
+    // (así los tickets del reporte histórico conservan su límite hasta que se les ponga categoría).
+    const fs = U.isoDateTime(p.fecha_solicitud);
+    const h = C.horasCotizacion(p, cats);
+    if (fs && h !== null) return C.sumaHorasHabiles(fs, h, hol);
     const cap = U.iso(p.fecha_limite_cotizacion);
     if (cap) { const dt = U.isoDateTime(p.fecha_limite_cotizacion); return dt && dt.slice(11) !== '00:00:00' ? dt : C.finDelDia(cap); }
-    const fs = U.isoDateTime(p.fecha_solicitud); if (!fs) return null;
-    const h = C.horasCotizacion(p, cats);
-    return h === null ? null : C.sumaHorasHabiles(fs, h, hol);
+    return null;
+  };
+  /** ¿De dónde sale el límite? 'CATEGORIA', 'MANUAL' o null (sin categoría ni fecha) */
+  C.origenLimiteCotizacion = function (p, cats) {
+    if (C.horasCotizacion(p, cats) !== null && U.isoDateTime(p.fecha_solicitud)) return 'CATEGORIA';
+    return U.iso(p.fecha_limite_cotizacion) ? 'MANUAL' : null;
   };
   /** Horas hábiles que faltan (o sobran, en negativo) para la fecha límite de cotización */
   C.restanteCotizacion = function (p, cats, hol, ahora) {
@@ -400,7 +418,11 @@
     // La etapa 3 solo se activa si la cotización venció sin autorización de compra
     const recotizaActiva = !aut && !!vence && (vence < hoy || !!recot);
     // Metas en horas hábiles (la cotización, según los días de su categoría)
-    const metaCot = C.horasCotizacion(p, cats) ?? C.diasAHoras(metas.cotizacion);
+    // Meta de la cotización: las horas de su categoría. Sin categoría, las horas hábiles que había hasta
+    // la fecha límite capturada (tickets históricos); si tampoco hay, no se evalúa (no se usa un valor fijo).
+    const limiteTmp = C.fechaLimiteCotizacion(p, cats, hol);
+    const metaCot = C.horasCotizacion(p, cats)
+      ?? (limiteTmp && U.isoDateTime(p.fecha_solicitud) ? Math.max(0, C.horasHabiles(p.fecha_solicitud, limiteTmp, hol)) : null);
     const horas = C.tiempoAsignacionHoras(p, hol);
     // Los extremos de cada etapa se manejan con fecha y hora; las fechas sin hora arrancan al abrir (8:00)
     const dtSol = U.isoDateTime(p.fecha_solicitud), dtAsig = U.isoDateTime(p.fecha_asignacion);
@@ -425,7 +447,7 @@
         dias = enHoras ? Math.max(0, C.horasHabiles(ini, now, hol)) : C.diasHabiles(t.ini, hoy, hol);
       }
       else estado = t.k === 'recotizacion' && !recotizaActiva ? 'INACTIVA' : 'PENDIENTE';
-      const cumple = dias === null ? null : dias <= t.meta;
+      const cumple = dias === null || t.meta === null || t.meta === undefined ? null : dias <= t.meta;
       return { ...def, ini: t.ini, fin: t.fin, dias, meta: t.meta, estado, cumple, enCurso: estado === 'EN CURSO' };
     });
     let actual;
@@ -444,7 +466,8 @@
       etapas, actual, limite, vence, vence2, vigente: vig, venceEn, recotizaActiva,
       alertaCotizacion: C.alertaCotizacionTicket(p, hoy, cats, hol, now),
       restanteCotizacion: C.restanteCotizacion(p, cats, hol, now),
-      horasCotizacion: metaCot, limiteCalculado: !U.iso(p.fecha_limite_cotizacion),
+      horasCotizacion: metaCot, origenLimite: C.origenLimiteCotizacion(p, cats), limiteCalculado: C.origenLimiteCotizacion(p, cats) === 'CATEGORIA',
+      categoriaDias: C.diasCategoria(p.categoria_ticket, cats),
       alertaCompra: C.alertaCompraTicket(p, hoy),
       horasAsignacion: horas, validacion: C.validacionTiempo(p),
       diasFuera: C.diasFueraPlazoTicket(p, hoy), estimada: est,

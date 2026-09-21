@@ -416,3 +416,9 @@ body:has(#view.vista-fija) .foot { display: none; }
 body.tabla-max .top { display: none; }
 body.tabla-max #view.vista-fija { height: 100vh; max-width: none; }
 body.tabla-max #view.vista-fija > .card:not(.card-tabla) { display: none; }
+
+/* v1.9.0 · Categoría del ticket editable en la tabla */
+.grid select.cat-sel { font-size: 12px; padding: 2px 6px; height: 26px; border-radius: 6px; width: 200px; max-width: 200px; }
+.grid select.cat-sel.cat-falta { border-color: #e7b43a; background: #fff8e6; color: #7a5200; font-weight: 700; }
+.trunc-in { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.pf-cat-info { margin-top: 4px; }

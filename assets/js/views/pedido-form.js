@@ -20,14 +20,16 @@
           <div class="fld"><label for="pf_comprador" id="pf_compLbl">Comprador asignado *</label><input id="pf_comprador" name="comprador" list="dl_COMPRADOR"><small id="pf_compHint"></small></div>
           <div class="fld"><label for="pf_solicitante">Solicitante *</label><input id="pf_solicitante" name="solicitante" list="dl_SOLICITANTE" placeholder="Ej. BODEGA" required></div>
           <div class="fld"><label for="pf_area">Área *</label><input id="pf_area" name="area" list="dl_AREA" placeholder="Ej. CALL CENTER" required></div>
-          <div class="fld"><label for="pf_proveedor">Proveedor <span class="req-ed">*</span></label><input id="pf_proveedor" name="proveedor" list="dl_PROVEEDOR" placeholder="Ej. CEMIX MEXICO SA DE CV"></div>
-          <div class="fld only-edt"><label for="pf_material">Tipo de material</label><input id="pf_material" name="tipo_material" list="dl_TIPO_MATERIAL" placeholder="Ej. CEMENTO"></div>
+          <div class="fld no-tk"><label for="pf_proveedor">Proveedor <span class="req-ed">*</span></label><input id="pf_proveedor" name="proveedor" list="dl_PROVEEDOR" placeholder="Ej. CEMIX MEXICO SA DE CV"></div>
+          <div class="fld only-ed"><label for="pf_material">Tipo de material</label><input id="pf_material" name="tipo_material" list="dl_TIPO_MATERIAL" placeholder="Ej. CEMENTO"></div>
           <div class="fld"><label for="pf_folio">Folio del pedido *</label><input id="pf_folio" name="folio_pedido" placeholder="No dejar vacío" required></div>
           <div class="fld"><label for="pf_oc">ID / OC</label><input id="pf_oc" name="id_oc"></div>
           <div class="fld only-ed"><label for="pf_directo">Directo Sanver</label><select id="pf_directo" name="directo_sanver">${U.options(['DG', 'SUCURSAL'], 'DG', { empty: '—' })}</select></div>
+          <div class="fld fld-wide only-tk"><label for="pf_cat">Categoría del ticket *</label><select id="pf_cat" name="categoria_ticket"></select><small id="pf_catInfo" class="pf-cat-info">La categoría define el tiempo de cotización (Catálogos → Categorías de tickets).</small></div>
           <div class="fld only-sp"><label for="pf_clasif">Clasificación de política</label><select id="pf_clasif" name="validacion_clasificacion">${U.options(C.CLASIF_POLITICA, '', { empty: '—' })}</select></div>
           <div class="fld fld-wide"><label for="pf_coment">Comentarios</label><input id="pf_coment" name="comentarios"></div>
         </div>
+        <div class="no-tk">
         <div class="pf-sub">Parámetros logísticos</div>
         <label class="chk box"><input type="checkbox" id="pf_manTE"> Captura manual de tiempo de entrega</label>
         <div class="grid-fields g4">
@@ -37,7 +39,8 @@
           <div class="fld"><label for="pf_tipodias">Tipo de días</label><select id="pf_tipodias" disabled>${U.options(['NATURALES', 'HABILES'], 'NATURALES')}</select></div>
         </div>
         <div class="pf-info" id="pf_teInfo"></div>
-        <div class="only-edt">
+        </div>
+        <div class="only-ed">
           <div class="pf-sub">Tiempo de descarga</div>
           <label class="chk box"><input type="checkbox" id="pf_manTD"> Captura manual de tiempo de descarga</label>
           <div class="grid-fields g4"><div class="fld"><label for="pf_td">Tiempo de descarga (hrs)</label><input id="pf_td" type="number" step="0.5" min="0" readonly placeholder="Se muestra automáticamente"></div></div>
@@ -66,7 +69,29 @@
       U.$$('.only-ed', m.el).forEach((x) => { x.hidden = mod !== 'ENTREGA_DIRECTA'; });
       U.$$('.only-edt', m.el).forEach((x) => { x.hidden = mod === 'SOBREPEDIDO'; });
       U.$$('.req-ed', m.el).forEach((x) => { x.hidden = mod !== 'ENTREGA_DIRECTA'; });
-      calcular(); drawLines();
+      U.$$('.only-tk', m.el).forEach((x) => { x.hidden = mod !== 'TICKET'; });
+      U.$$('.no-tk', m.el).forEach((x) => { x.hidden = mod === 'TICKET'; });
+      infoCategoria(); calcular(); drawLines();
+    }
+
+    /* v1.9.0 · Categoría del ticket → horas de cotización y fecha/hora límite */
+    function llenarCategorias() {
+      const cats = S.catsUnicas();
+      $('#pf_cat').innerHTML = `<option value="">— Elige la categoría —</option>${cats.map((c) => `<option value="${U.esc(c.categoria)}">${U.esc(c.categoria)} · ${c.dias} día(s)</option>`).join('')}`;
+    }
+    function fechaHoraSolicitud() {
+      const d = $('#pf_fecha').value; if (!d) return null;
+      const now = new Date();
+      return `${d}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+    }
+    function infoCategoria() {
+      if (modulo() !== 'TICKET') return;
+      const cat = $('#pf_cat').value, box = $('#pf_catInfo');
+      const d = C.diasCategoria(cat, S.cat.cats);
+      if (!cat || d === null) { box.innerHTML = 'La categoría define el tiempo de cotización (Catálogos → Categorías de tickets).'; return; }
+      const h = C.diasAHoras(d), fs = fechaHoraSolicitud();
+      const lim = fs ? C.sumaHorasHabiles(fs, h, S.hol) : null;
+      box.innerHTML = `Tiempo de cotización: <b>${d} día(s) = ${C.textoHoras(h)} h hábiles</b>${lim ? ` · límite <b>${U.fmtDateTime(lim)}</b>` : ''}`;
     }
 
     function calcular() {
@@ -265,6 +290,7 @@
       if (!v('#pf_solicitante')) falt.push('solicitante');
       if (!v('#pf_area')) falt.push('área');
       if (!v('#pf_folio')) falt.push('folio del pedido');
+      if (mod === 'TICKET' && !v('#pf_cat')) falt.push('categoría del ticket');
       if (mod === 'ENTREGA_DIRECTA' && !v('#pf_proveedor')) falt.push('proveedor');
       const lineas = st.lineas.filter((l) => l.clave || l.descripcion);
       if (!lineas.length) falt.push('al menos una clave');
@@ -281,7 +307,7 @@
       const folio = U.norm(v('#pf_folio'));
       const existentes = S.pedidos.filter((p) => U.norm(p.folio_pedido) === folio).length;
       if (existentes && !(await UI.confirm(`El folio ${folio} ya tiene ${existentes} clave(s) registradas. ¿Agregar estas claves al mismo folio?`))) return;
-      if (!v('#pf_db') && !(await UI.confirm('No hay tiempo de entrega: las claves se guardarán sin fecha estimada. ¿Continuar?'))) return;
+      if (mod !== 'TICKET' && !v('#pf_db') && !(await UI.confirm('No hay tiempo de entrega: las claves se guardarán sin fecha estimada. ¿Continuar?'))) return;
 
       const now = new Date();
       const fecha = `${v('#pf_fecha')}T${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
@@ -297,6 +323,10 @@
         tipo_dias: v('#pf_db') ? $('#pf_tipodias').value : null, fecha_estimada_manual: false,
         tiempo_descarga_horas: mod !== 'SOBREPEDIDO' && v('#pf_td') !== '' ? +v('#pf_td') : null,
       };
+      if (mod === 'TICKET') {
+        // En tickets el proveedor y su tiempo de entrega se conocen después (al autorizar/pagar); la categoría define la cotización
+        Object.assign(baseRow, { categoria_ticket: v('#pf_cat'), proveedor: null, tipo_material: null, tiempo_entrega: null, dias_inicio: null, dias_fin: null, tipo_dias: null, tiempo_descarga_horas: null, estatus_facturacion: null });
+      }
       const fe = C.fechasEstimadas(baseRow, S.hol);
       baseRow.fecha_estimada_inicio = fe.inicio; baseRow.fecha_estimada = fe.fin;
       const rows = lineas.map((l) => ({
@@ -311,6 +341,9 @@
       } catch (e) { UI.toast(e.message, 'error'); } finally { UI.loading(false); }
     };
 
+    llenarCategorias();
+    $('#pf_cat').addEventListener('change', infoCategoria);
+    $('#pf_fecha').addEventListener('change', infoCategoria);
     aplicarModo(); adapt();
   };
 })();

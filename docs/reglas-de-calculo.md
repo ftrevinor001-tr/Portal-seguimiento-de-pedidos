@@ -95,6 +95,13 @@ Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (
 
 **TIEMPO DE ASIGNACION** ya no se compara contra el Excel: desde la v1.7.0 son horas hábiles. En los 222 tickets medidos el promedio baja de **3.6 h corridas a 0.8 h hábiles**, ninguno sube, y 220 de 222 (99.1%) quedan dentro de la meta de 8.5 h.
 
+## Categoría del ticket y campos del ticket (v1.9.0)
+- **Nuevo ticket** pide la **categoría** (obligatoria) y muestra al momento el tiempo de cotización (días × 8.5 h hábiles) y la fecha y hora límite. Ya no muestra Parámetros logísticos, Proveedor ni Tiempo de descarga: al levantar un ticket todavía no hay proveedor.
+- En el tablero de tickets la **categoría se elige en la misma tabla** (con la contraseña) y se guarda en todas las claves del ticket; el pie muestra cuántos tickets siguen **sin categoría** (clic para filtrarlos).
+- **Manda la categoría**: el límite de cotización = solicitud + días de la categoría × 8.5 h hábiles. La fecha límite capturada a mano solo se usa en tickets sin categoría (el histórico del reporte). Sin categoría ni fecha, la cotización no se evalúa (ya no hay un valor fijo de 3 días).
+- **Catálogo sin repetidos**: la misma categoría con y sin acentos cuenta una sola vez en las listas. En Catálogos → Categorías de tickets el botón **🧹 Quitar repetidas** desactiva las versiones sin acentos y pasa los tickets a la que se queda. La carga del reporte ya no crea repetidas.
+- **Detalle del ticket**: la fecha de solicitud y la categoría van en *Solicitud*; la sección *Tiempos de entrega* se volvió **6 · Llegada del artículo** con: tiempo y días de entrega del proveedor, tipo de días, fecha estimada de llegada y fecha real. La **fecha estimada = fecha de pago (o de autorización si aún no hay pago) + días del proveedor**; si se corrige a mano se respeta. Se quitaron de los tickets: Días A, Fecha estimada inicio, casilla "capturada a mano", Tiempo de descarga, Fecha compromiso y nota, Tipo directo, Alerta ID (OC), Tipo de material y la sección Facturación. Los indicadores de pedido (existencia, INV, facturación, clasificación) ya no se muestran en tickets. Ningún dato se borró.
+
 ## Vista compacta (v1.8.0)
 - Objetivo: ver **al menos 8 renglones** de la tabla con el navegador al 100 %, también en equipos con Windows al 125-150 %.
 - Encabezado más delgado (el subtítulo queda como texto de ayuda al pasar el mouse). En las pantallas de tabla se oculta el pie de página; la hora de la última carga queda en el botón **⟳ Actualizar** (al pasar el mouse).

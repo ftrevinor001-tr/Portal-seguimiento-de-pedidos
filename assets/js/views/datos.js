@@ -221,7 +221,11 @@
         cats = cr.map((o) => {
           const k = Object.keys(o);
           const cat = o[k.find((x) => /CATEGOR/i.test(x))], d = o[k.find((x) => /DIAS|DÍAS/i.test(x))];
-          return U.blank(cat) ? null : { categoria: norm1(cat), dias: Number(d) || 3 };
+          if (U.blank(cat)) return null;
+          // v1.9.0: si ya existe (aunque sea sin acentos) se actualiza esa misma; si no, se da de alta en mayúsculas CON acentos
+          const txt = String(cat).trim().replace(/\s+/g, ' ').toUpperCase();
+          const existe = S.catsUnicas().find((c) => U.norm(c.categoria) === U.norm(txt)) || (S.cat.cats || []).find((c) => U.norm(c.categoria) === U.norm(txt));
+          return { categoria: existe ? existe.categoria : txt, dias: Number(d) || 3 };
         }).filter(Boolean);
       }
       plan = { filas, avisos, hoja };
