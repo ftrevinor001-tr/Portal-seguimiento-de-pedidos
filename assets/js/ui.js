@@ -81,7 +81,7 @@
    * no hay botón "Siguiente"; al bajar con el scroll se agregan más renglones y el
    * encabezado se queda fijo. cols: [{k, label, render(row), sort(row), cls, width}]
    */
-  UI.table = function (container, { cols, rows, bloque = 150, pageSize, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '' }) {
+  UI.table = function (container, { cols, rows, bloque = 150, pageSize, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '', pieExtra = null, ampliar = false }) {
     if (pageSize) bloque = pageSize; // compatibilidad con llamadas antiguas
     const st = { sortKey, sortDir, selected: new Set(), shown: 0 };
     const nCols = cols.length + (selectable ? 1 : 0);
@@ -107,10 +107,14 @@
     function pintarPie() {
       if (!pie) return;
       const falta = data.length - st.shown;
-      pie.innerHTML = `<span>${U.fmtNum(data.length)} ${data.length === 1 ? 'registro' : 'registros'}${selectable && st.selected.size ? ` · <b>${st.selected.size} seleccionados</b>` : ''}</span>
+      const izq = pieExtra ? pieExtra() : `${U.fmtNum(data.length)} ${data.length === 1 ? 'registro' : 'registros'}`;
+      pie.innerHTML = `<span class="pager-izq">${izq}${selectable && st.selected.size ? ` · <b>${st.selected.size} seleccionados</b>` : ''}</span>
         <span class="pager-pos">${!data.length ? '' : falta > 0
-          ? `Mostrando ${U.fmtNum(st.shown)} de ${U.fmtNum(data.length)} · baja para ver más o <button class="btn btn-sm btn-ghost" data-todo="1">Mostrar todos</button>`
-          : data.length === 1 ? 'Se muestra el único renglón' : `Se muestran los ${U.fmtNum(data.length)} renglones`}</span>`;
+          ? `Mostrando ${U.fmtNum(st.shown)} de ${U.fmtNum(data.length)} · <button class="btn btn-sm btn-ghost" data-todo="1">Mostrar todos</button>`
+          : data.length === 1 ? 'Se muestra el único renglón' : `Se muestran los ${U.fmtNum(data.length)} renglones`}
+          ${ampliar ? `<button class="btn btn-sm btn-ghost" data-ampliar="1" title="Ocultar encabezado y filtros para ver más renglones (Esc para salir)">${document.body.classList.contains('tabla-max') ? '⤡ Salir de pantalla completa' : '⤢ Pantalla completa'}</button>` : ''}</span>`;
+      const amp = U.$('[data-ampliar]', pie);
+      if (amp) amp.onclick = () => UI.pantallaCompleta(!document.body.classList.contains('tabla-max'));
       const b = U.$('[data-todo]', pie);
       if (b) b.onclick = () => {
         const ld = data.length - st.shown > 800 ? UI.loading('Mostrando todos los renglones…') : null;
@@ -199,6 +203,16 @@
     draw();
     return api;
   };
+
+  /** Pantalla completa de la tabla (v1.8.0): oculta encabezado y filtros; Esc para salir */
+  UI.pantallaCompleta = function (on) {
+    document.body.classList.toggle('tabla-max', !!on);
+    U.$$('[data-ampliar]').forEach((b) => { b.textContent = on ? '⤡ Salir de pantalla completa' : '⤢ Pantalla completa'; });
+    if (root.APP && APP.medirTop) setTimeout(APP.medirTop, 20);
+  };
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && document.body.classList.contains('tabla-max') && !U.$('.modal-back') && !U.$('.drawer-back')) UI.pantallaCompleta(false);
+  });
 
   /** Barra apilada horizontal con leyenda (status) */
   UI.stackBar = function (segs, { height = 30 } = {}) {

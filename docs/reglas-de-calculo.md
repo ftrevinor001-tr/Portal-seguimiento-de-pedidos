@@ -95,6 +95,15 @@ Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (
 
 **TIEMPO DE ASIGNACION** ya no se compara contra el Excel: desde la v1.7.0 son horas hábiles. En los 222 tickets medidos el promedio baja de **3.6 h corridas a 0.8 h hábiles**, ninguno sube, y 220 de 222 (99.1%) quedan dentro de la meta de 8.5 h.
 
+## Vista compacta (v1.8.0)
+- Objetivo: ver **al menos 8 renglones** de la tabla con el navegador al 100 %, también en equipos con Windows al 125-150 %.
+- Encabezado más delgado (el subtítulo queda como texto de ayuda al pasar el mouse). En las pantallas de tabla se oculta el pie de página; la hora de la última carga queda en el botón **⟳ Actualizar** (al pasar el mouse).
+- Filtros en una sola línea: **Buscar, Año, Mes, Comprador, Status y Alerta** (en Tickets: Buscar, Año, Mes, Comprador, Etapa y Alerta de cotización). El resto está en **Más filtros ▾**, que se abre y cierra y se recuerda por pestaña; si hay un filtro activo escondido, el botón muestra cuántos.
+- El **resumen** (KPIs) ya no ocupa una tarjeta: el resumen corto va en el pie de la tabla con el botón **Ver resumen**, que abre los KPIs arriba de la tabla. Empieza cerrado.
+- Renglones de ~28 px (letra de 12.5 px).
+- **⤢ Pantalla completa** (en el pie de la tabla): esconde encabezado y filtros; **Esc** para salir.
+- Medido con 1920×1080 y Windows al 150 %: antes 1 a 3 renglones (y la página se desplazaba), ahora 14 en Sobrepedido/Entregas y 15 en Tickets; 21 en pantalla completa. Laptop pequeña (1366×768 al 125 %): 8 y 11.
+
 ## Pantallas (v1.6.0)
 - Hay una pestaña por módulo: **Sobrepedido** (sobrepedido, pedido especial y sucursal entrega directa) y **Entregas directas**. Los tickets siguen en su propia pestaña. La dirección anterior `#/seguimiento` lleva a Sobrepedido.
 - Las tres tablas (Sobrepedido, Entregas directas y Tickets) se ven **como una hoja de Excel**: ya no hay botones "Anterior/Siguiente"; al bajar con el scroll se agregan los renglones siguientes de 150 en 150 y el pie indica cuántos se están mostrando. El botón **Mostrar todos** pinta de golpe todos los renglones del filtro (útil para buscar con Ctrl+F).

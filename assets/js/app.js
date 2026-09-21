@@ -17,15 +17,34 @@
 
   /* ---------- Barra de filtros reutilizable ---------- */
   // spec: [{k, label, type:'select'|'search'|'seg', options:()=>[], empty:'Todos', wide}]
-  APP.filterBar = function (container, spec, state, onChange, { actions } = {}) {
-    container.innerHTML = `<div class="filters">${spec.map((s) => {
-      if (s.type === 'search') return `<div class="flt flt-wide"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="search" data-k="${s.k}" value="${U.esc(state[s.k] || '')}" placeholder="${U.esc(s.placeholder || '')}"></div>`;
-      if (s.type === 'date') return `<div class="flt"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="date" data-k="${s.k}" value="${U.esc(state[s.k] || '')}"></div>`;
+  // v1.8.0: los filtros con {more:true} van en "Más filtros" (se abre y cierra; se recuerda con masKey)
+  APP.filterBar = function (container, spec, state, onChange, { actions, masKey } = {}) {
+    const campo = (s) => {
+      const cls = `${s.more ? 'flt-more' : ''}`;
+      if (s.type === 'search') return `<div class="flt flt-wide ${cls}"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="search" data-k="${s.k}" value="${U.esc(state[s.k] || '')}" placeholder="${U.esc(s.placeholder || '')}"></div>`;
+      if (s.type === 'date') return `<div class="flt ${cls}"><label for="flt_${s.k}">${U.esc(s.label)}</label><input id="flt_${s.k}" type="date" data-k="${s.k}" value="${U.esc(state[s.k] || '')}"></div>`;
       const opts = s.options();
-      return `<div class="flt ${s.wide ? 'flt-wide' : ''}"><label for="flt_${s.k}">${U.esc(s.label)}</label><select id="flt_${s.k}" data-k="${s.k}">${U.options(opts, state[s.k], s.empty === null ? {} : { empty: s.empty ?? 'Todos' })}</select></div>`;
-    }).join('')}${actions ? `<div class="flt flt-actions">${actions}</div>` : ''}</div>`;
+      return `<div class="flt ${s.wide ? 'flt-wide' : ''} ${cls}"><label for="flt_${s.k}">${U.esc(s.label)}</label><select id="flt_${s.k}" data-k="${s.k}">${U.options(opts, state[s.k], s.empty === null ? {} : { empty: s.empty ?? 'Todos' })}</select></div>`;
+    };
+    const principales = spec.filter((s) => !s.more), mas = spec.filter((s) => s.more);
+    let abierto = false;
+    if (mas.length && masKey) { try { abierto = localStorage.getItem(`sp_flt_mas_${masKey}`) === '1'; } catch { /* sin storage */ } }
+    const textoMas = () => {
+      const n = mas.filter((s) => !U.blank(state[s.k])).length;
+      return `${abierto ? 'Menos filtros ▴' : 'Más filtros ▾'}${n ? ` <b class="cnt" title="Filtros activos que no se ven">${n}</b>` : ''}`;
+    };
+    const btnMas = mas.length ? `<button class="btn btn-ghost btn-sm btn-mas" type="button" data-mas="1">${textoMas()}</button>` : '';
+    container.innerHTML = `<div class="filters ${mas.length && !abierto ? 'colapsado' : ''}">${principales.map(campo).join('')}${(actions || btnMas) ? `<div class="flt flt-actions">${btnMas}${actions || ''}</div>` : ''}${mas.map(campo).join('')}</div>`;
+    const bMas = U.$('[data-mas]', container);
+    if (bMas) bMas.onclick = () => {
+      abierto = !abierto;
+      if (masKey) { try { localStorage.setItem(`sp_flt_mas_${masKey}`, abierto ? '1' : '0'); } catch { /* sin storage */ } }
+      U.$('.filters', container).classList.toggle('colapsado', !abierto);
+      bMas.innerHTML = textoMas();
+      setTimeout(APP.medirTop, 20);
+    };
     U.$$('[data-k]', container).forEach((el) => {
-      const fire = () => { state[el.dataset.k] = el.value; onChange(el.dataset.k); };
+      const fire = () => { state[el.dataset.k] = el.value; if (bMas) bMas.innerHTML = textoMas(); onChange(el.dataset.k); };
       if (el.tagName === 'INPUT' && el.type !== 'date') el.addEventListener('input', U.debounce(fire, 250)); else el.addEventListener('change', fire);
     });
   };
@@ -109,7 +128,7 @@
     U.$('#app').innerHTML = `
       <header class="top">
         <div class="top-row">
-          <div class="brand"><h1>${U.esc(CFG.TITULO || 'Portal de Seguimiento de Pedidos')}</h1><p>Sobrepedido · Entregas directas · Pedido especial · Tickets — Área de Compras</p></div>
+          <div class="brand" title="Sobrepedido · Entregas directas · Pedido especial · Tickets — Área de Compras"><h1>${U.esc(CFG.TITULO || 'Portal de Seguimiento de Pedidos')}</h1><p>Sobrepedido · Entregas directas · Pedido especial · Tickets — Área de Compras</p></div>
           <div class="top-actions">
             <span class="pill">${U.esc(CFG.EMPRESA || '')}</span>
             <span id="sesionBox"></span>
@@ -153,6 +172,8 @@
     try {
       await S.loadAll((n) => ld.text(`Cargando pedidos… ${U.fmtNum(n)}`));
       U.$('#lastLoad').textContent = `Actualizado ${new Date().toLocaleString('es-MX')} · ${U.fmtNum(S.pedidos.length)} claves activas`;
+      // En las pantallas de tabla el pie de página se oculta: la hora de carga queda en el botón
+      U.$('#btnRefresh').title = `Volver a cargar datos · ${U.$('#lastLoad').textContent}`;
       APP.rerender();
     } catch (e) {
       console.error(e);

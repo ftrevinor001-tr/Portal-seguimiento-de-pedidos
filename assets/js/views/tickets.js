@@ -1,7 +1,7 @@
 /* Tickets por etapas — réplica del "REPORTE DE TICKETS" (v1.3.0) */
 (function () {
   const st = { anio: '', mes: '', comprador: '', solicitante: '', categoria: '', etapa: '', estatus: '', alerta_cot: '', alerta_compra: '', desde: '', hasta: '', q: '' };
-  let root = null, table = null;
+  let root = null, table = null, mini = '';
   const CLS_ETAPA = { 'POR ASIGNAR': 'warning', 'EN COTIZACIÓN': 'info', 'ESPERA DEL USUARIO': 'info', 'POR RECOTIZAR': 'critical', 'POR PAGAR': 'warning', 'EN SURTIMIENTO': 'ok', ENTREGADO: 'ok', CANCELADO: 'muted' };
   const CLS_ALERTA = { 'EN TIEMPO': 'ok', 'POR VENCER': 'warning', 'VENCE HOY': 'warning', 'FUERA DEL PLAZO': 'critical', FINALIZADO: 'ok', 'SIN FECHA LIMITE': 'muted', 'SIN AUTORIZACION DE COMPRA': 'muted', 'SIN FECHA ESTIMADA': 'muted', CANCELADO: 'muted' };
   const badge = (v) => v ? `<span class="badge badge-${CLS_ALERTA[v] || 'muted'}">${U.esc(v)}</span>` : '';
@@ -147,31 +147,34 @@
     const rows = filtrar(tickets());
     const abierto = !U.$('#tkResumen', root).hidden;
     const cnt = (e) => rows.filter((r) => r.etapa === e).length;
-    U.$('#tkResumenMini', root).textContent = `${U.fmtNum(rows.length)} tickets · ${U.fmtNum(cnt('POR ASIGNAR'))} por asignar · ${U.fmtNum(rows.filter((r) => r.alerta_cot === 'FUERA DEL PLAZO').length)} cotización fuera de plazo · ${U.fmtNum(cnt('ENTREGADO'))} entregados`;
+    const cotFuera = rows.filter((r) => r.alerta_cot === 'FUERA DEL PLAZO').length;
+    // v1.8.0: el resumen corto vive en el pie de la tabla
+    mini = `<b>${U.fmtNum(rows.length)}</b> tickets · <b>${U.fmtNum(cnt('POR ASIGNAR'))}</b> por asignar · <b class="${cotFuera ? 'error' : ''}">${U.fmtNum(cotFuera)}</b> cotización fuera de plazo · <b>${U.fmtNum(cnt('ENTREGADO'))}</b> entregados
+      <button class="btn btn-sm btn-ghost" data-resumen="1">${abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾'}</button>`;
     if (abierto) {
       U.$('#tkKpis', root).innerHTML = kpis(rows);
       U.$('#tkFlujo', root).innerHTML = flujo(rows);
       U.$$('[data-etapa]', root).forEach((b) => b.onclick = () => { st.etapa = st.etapa === b.dataset.etapa ? '' : b.dataset.etapa; filtros(); draw(); });
       U.$('#tkEtapas', root).innerHTML = resumenEtapas(rows);
     }
-    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'f_sol', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.', alto: true, cls: 'lock-first compact' });
+    table = UI.table(U.$('#tkTable', root), { cols: COLS, rows, sortKey: 'f_sol', sortDir: -1, onRow: (r) => APP.abrirDetalle(r.p.id), emptyMsg: 'No hay tickets con estos filtros.', alto: true, cls: 'lock-first compact', pieExtra: () => mini, ampliar: true });
   }
 
   function filtros() {
     APP.filterBar(U.$('#tkFilters', root), [
+      { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Ticket, clave, descripción, solicitante…', wide: true },
       { k: 'anio', label: 'Año', options: APP.anios },
       { k: 'mes', label: 'Mes', options: APP.mesesOpts },
       { k: 'comprador', label: 'Comprador', options: () => S.lista('COMPRADOR', 'TICKET') },
-      { k: 'solicitante', label: 'Solicitante', options: () => S.lista('SOLICITANTE', 'TICKET') },
-      { k: 'categoria', label: 'Categoría', options: () => S.lista('CATEGORIA'), wide: true },
       { k: 'etapa', label: 'Etapa', options: () => C.ETAPAS_FLUJO_TICKET.concat(['CANCELADO']) },
-      { k: 'estatus', label: 'Estatus', options: () => C.STATUS.TICKET },
       { k: 'alerta_cot', label: 'Alerta cotización', options: () => C.ALERTAS_TICKET },
-      { k: 'alerta_compra', label: 'Alerta compra', options: () => C.ALERTAS_TICKET },
-      { k: 'desde', label: 'Solicitud desde', type: 'date' },
-      { k: 'hasta', label: 'Solicitud hasta', type: 'date' },
-      { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Ticket, clave, descripción, solicitante…', wide: true },
-    ], st, () => draw(), { actions: '<button class="btn btn-ghost btn-sm" id="tkClear">Limpiar</button>' });
+      { k: 'solicitante', label: 'Solicitante', more: true, options: () => S.lista('SOLICITANTE', 'TICKET') },
+      { k: 'categoria', label: 'Categoría', more: true, options: () => S.lista('CATEGORIA'), wide: true },
+      { k: 'estatus', label: 'Estatus', more: true, options: () => C.STATUS.TICKET },
+      { k: 'alerta_compra', label: 'Alerta compra', more: true, options: () => C.ALERTAS_TICKET },
+      { k: 'desde', label: 'Solicitud desde', more: true, type: 'date' },
+      { k: 'hasta', label: 'Solicitud hasta', more: true, type: 'date' },
+    ], st, () => draw(), { actions: '<button class="btn btn-ghost btn-sm" id="tkClear">Limpiar</button>', masKey: 'tickets' });
     U.$('#tkClear', root).onclick = () => { Object.keys(st).forEach((k) => st[k] = ''); filtros(); draw(); };
   }
 
@@ -226,26 +229,23 @@
             <div class="head-actions"><button class="btn btn-ghost btn-sm" id="tkXls">⭳ Descargar Excel</button>${S.puedeEditar() ? '<button class="btn btn-primary btn-sm" id="tkNuevo">＋ Nuevo ticket</button>' : ''}</div>
           </div>
           <div id="tkFilters"></div></section>
-        <section class="card card-resumen"><div class="resumen-toggle"><b>Resumen</b><span class="muted small" id="tkResumenMini"></span><button class="btn btn-light btn-sm" id="tkVerResumen">Ver resumen ▾</button></div>
-          <div id="tkResumen" hidden>
+        <section class="card card-tabla">
+          <div id="tkResumen" class="resumen-panel" hidden>
             <p class="muted small">Etapas: <b>1 Asignación</b> (jefe de área) · <b>2 Cotización</b> (contra la fecha y hora límite de su categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las etapas 1 a 5 se miden en horas hábiles (8:00-13:30 y 15:00-18:00, de lunes a viernes). Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
             <div id="tkKpis"></div><div id="tkFlujo"></div><div id="tkEtapas"></div></div>
-        </section>
-        <section class="card card-tabla"><div id="tkTable"></div></section>`;
+          <div id="tkTable"></div></section>`;
       filtros();
       let abierto = false;
       try { abierto = localStorage.getItem('sp_tk_resumen') === '1'; } catch { /* sin storage */ }
-      const pintarResumen = () => {
-        U.$('#tkResumen', c).hidden = !abierto;
-        U.$('#tkVerResumen', c).textContent = abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾';
-        setTimeout(APP.medirTop, 30);
-      };
-      U.$('#tkVerResumen', c).onclick = () => {
+      U.$('#tkResumen', c).hidden = !abierto;
+      // El botón "Ver resumen" está en el pie de la tabla (se vuelve a pintar), por eso se escucha en el contenedor
+      U.$('#tkTable', c).addEventListener('click', (e) => {
+        if (!e.target.closest('[data-resumen]')) return;
         abierto = !abierto;
         try { localStorage.setItem('sp_tk_resumen', abierto ? '1' : '0'); } catch { /* sin storage */ }
-        pintarResumen(); draw();
-      };
-      pintarResumen();
+        U.$('#tkResumen', c).hidden = !abierto;
+        draw();
+      });
       // Los botones se conectan siempre, aunque los datos todavía estén cargando
       if (S.cargado) draw(); else U.$('#tkTable', c).innerHTML = UI.empty('Cargando…');
       U.$('#tkXls', c).onclick = exportar;

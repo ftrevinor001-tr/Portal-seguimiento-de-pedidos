@@ -47,7 +47,7 @@
     const unTipo = modulo === 'ENTREGA_DIRECTA';
     const cols = unTipo ? COLS.filter((c) => c.k !== 'tipo_solicitud') : COLS;
     const st = { anio: '', mes: '', anio_est: '', mes_est: '', tipo_solicitud: '', comprador: '', area: '', solicitante: '', status: '', alerta: '', revision: '', q: '', bajas: false };
-    let table = null, root = null;
+    let table = null, root = null, mini = '';
 
     function base() { return (st.bajas ? (S.bajas || []) : S.pedidos).filter((p) => p.modulo === modulo); }
     function filtrar() {
@@ -82,10 +82,13 @@
     function draw() {
       const rows = filtrar();
       const cnt = (a) => rows.filter((p) => p._alerta === a).length;
-      U.$('#segMini', root).textContent = `${U.fmtNum(rows.length)} claves · ${U.fmtNum(cnt('FUERA DEL PLAZO'))} fuera del plazo · ${U.fmtNum(cnt('NOTIFICAR'))} por notificar`;
-      if (!U.$('#segResumen', root).hidden) U.$('#segKpis', root).innerHTML = kpis(rows);
+      // v1.8.0: el resumen corto vive en el pie de la tabla (ya no ocupa una tarjeta aparte)
+      const abierto = !U.$('#segResumen', root).hidden;
+      mini = `<b>${U.fmtNum(rows.length)}</b> claves · <b class="${cnt('FUERA DEL PLAZO') ? 'error' : ''}">${U.fmtNum(cnt('FUERA DEL PLAZO'))}</b> fuera del plazo · <b>${U.fmtNum(cnt('NOTIFICAR'))}</b> por notificar
+        <button class="btn btn-sm btn-ghost" data-resumen="1">${abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾'}</button>`;
+      if (abierto) U.$('#segKpis', root).innerHTML = kpis(rows);
       if (!table) {
-        table = UI.table(U.$('#segTable', root), { cols, rows, selectable: S.puedeEditar(), onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1, alto: true, cls: 'compact' });
+        table = UI.table(U.$('#segTable', root), { cols, rows, selectable: S.puedeEditar(), onRow: (p) => APP.abrirDetalle(p.id), sortKey: 'fecha_solicitud', sortDir: -1, alto: true, cls: 'compact', pieExtra: () => mini, ampliar: true });
         table.onSelect = (sel) => { const b = U.$('#btnBulk', root); if (!b) return; b.disabled = !sel.size; b.textContent = sel.size ? `Editar ${sel.size} seleccionados` : 'Editar seleccionados'; };
       } else table.setRows(rows);
       table.onSelect(table.selected());
@@ -93,20 +96,21 @@
 
     function filtros() {
       APP.filterBar(U.$('#segFilters', root), [
+        // A la vista: los filtros de todos los días. El resto, en "Más filtros".
+        { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Clave, folio, descripción, OC…' },
         { k: 'anio', label: 'Año (solicitud)', options: APP.anios },
         { k: 'mes', label: 'Mes (solicitud)', options: APP.mesesOpts },
-        { k: 'anio_est', label: 'Año (f. estimada)', options: () => U.uniq(base().map((p) => U.iso(p.fecha_estimada) ? +U.iso(p.fecha_estimada).slice(0, 4) : null)).sort((a, b) => b - a) },
-        { k: 'mes_est', label: 'Mes (f. estimada)', options: APP.mesesOpts },
-        ...(unTipo ? [] : [{ k: 'tipo_solicitud', label: 'Tipo de solicitud', options: () => U.sortEs(U.uniq(base().map((p) => p.tipo_solicitud))) }]),
         { k: 'comprador', label: 'Comprador', options: () => S.lista('COMPRADOR', modulo) },
-        { k: 'area', label: 'Área', options: () => S.lista('AREA', modulo) },
-        { k: 'solicitante', label: 'Solicitante', options: () => S.lista('SOLICITANTE', modulo) },
         { k: 'status', label: 'Status', options: () => S.lista('STATUS', modulo) },
         { k: 'alerta', label: 'Alerta', options: () => C.ALERTAS },
-        { k: 'revision', label: 'Revisión', options: () => [{ value: 'STATUS_SIN_FECHA', label: 'Finalizado/entregado sin fecha real' }, { value: 'PENDIENTE_CON_FECHA', label: 'Pendiente con fecha real' }], wide: true },
-        { k: 'q', label: 'Buscar', type: 'search', placeholder: 'Clave, folio, descripción, OC…' },
+        { k: 'anio_est', label: 'Año (f. estimada)', more: true, options: () => U.uniq(base().map((p) => U.iso(p.fecha_estimada) ? +U.iso(p.fecha_estimada).slice(0, 4) : null)).sort((a, b) => b - a) },
+        { k: 'mes_est', label: 'Mes (f. estimada)', more: true, options: APP.mesesOpts },
+        ...(unTipo ? [] : [{ k: 'tipo_solicitud', label: 'Tipo de solicitud', more: true, options: () => U.sortEs(U.uniq(base().map((p) => p.tipo_solicitud))) }]),
+        { k: 'area', label: 'Área', more: true, options: () => S.lista('AREA', modulo) },
+        { k: 'solicitante', label: 'Solicitante', more: true, options: () => S.lista('SOLICITANTE', modulo) },
+        { k: 'revision', label: 'Revisión', more: true, options: () => [{ value: 'STATUS_SIN_FECHA', label: 'Finalizado/entregado sin fecha real' }, { value: 'PENDIENTE_CON_FECHA', label: 'Pendiente con fecha real' }], wide: true },
       ], st, () => draw(), {
-        actions: `<button class="btn btn-ghost btn-sm" id="btnClear">Limpiar</button>`,
+        actions: `<button class="btn btn-ghost btn-sm" id="btnClear">Limpiar</button>`, masKey: nav,
       });
       U.$('#btnClear', root).onclick = () => { Object.keys(st).forEach((k) => { st[k] = k === 'bajas' ? st.bajas : ''; }); filtros(); draw(); };
     }
@@ -155,24 +159,21 @@
                 ${S.puedeEditar() ? '<button class="btn btn-primary btn-sm" id="btnNuevo">＋ Nuevo pedido</button>' : '<button class="btn btn-primary btn-sm" id="btnEntrarSeg">🔒 Entrar para editar</button>'}
               </div></div>
             <div id="segFilters"></div></section>
-          <section class="card card-resumen"><div class="resumen-toggle"><b>Resumen</b><span class="muted small" id="segMini"></span><button class="btn btn-light btn-sm" id="segVerResumen">Ocultar resumen ▴</button></div>
-            <div id="segResumen"><div id="segKpis"></div></div></section>
-          <section class="card card-tabla"><div id="segTable"></div></section>`;
+          <section class="card card-tabla">
+            <div id="segResumen" class="resumen-panel" hidden><div id="segKpis"></div></div>
+            <div id="segTable"></div></section>`;
         filtros();
-        // El resumen se puede ocultar para que la tabla ocupe toda la pantalla (se recuerda por pestaña)
-        let abierto = true;
-        try { abierto = localStorage.getItem(`sp_seg_kpis_${nav}`) !== '0'; } catch { /* sin storage */ }
-        const pintarResumen = () => {
-          U.$('#segResumen', c).hidden = !abierto;
-          U.$('#segVerResumen', c).textContent = abierto ? 'Ocultar resumen ▴' : 'Ver resumen ▾';
-          setTimeout(APP.medirTop, 30);
-        };
-        pintarResumen();
-        U.$('#segVerResumen', c).onclick = () => {
+        // El resumen (KPIs) empieza cerrado para dejarle la pantalla a la tabla; se recuerda por pestaña
+        let abierto = false;
+        try { abierto = localStorage.getItem(`sp_seg_res_${nav}`) === '1'; } catch { /* sin storage */ }
+        U.$('#segResumen', c).hidden = !abierto;
+        U.$('#segTable', c).addEventListener('click', (e) => {
+          if (!e.target.closest('[data-resumen]')) return;
           abierto = !abierto;
-          try { localStorage.setItem(`sp_seg_kpis_${nav}`, abierto ? '1' : '0'); } catch { /* sin storage */ }
-          pintarResumen(); draw();
-        };
+          try { localStorage.setItem(`sp_seg_res_${nav}`, abierto ? '1' : '0'); } catch { /* sin storage */ }
+          U.$('#segResumen', c).hidden = !abierto;
+          draw();
+        });
         // Los botones se conectan siempre, aunque los datos todavía estén cargando
         if (S.cargado) draw(); else U.$('#segTable', c).innerHTML = UI.empty('Cargando…');
         const bNuevo = U.$('#btnNuevo', c); if (bNuevo) bNuevo.onclick = () => APP.nuevoPedido(tipoNuevo);

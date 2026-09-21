@@ -354,3 +354,65 @@ details.grp summary > b { color: var(--brand-1); }
 .table-wrap.alto { scrollbar-gutter: stable; }
 .card-filtros .card-head.compacta { padding-bottom: 6px; margin-bottom: 2px; }
 .card-resumen .resumen-toggle { min-height: 26px; }
+
+/* =====================================================================
+   v1.8.0 · Vista compacta: más renglones de tabla a la vista
+   (pensada para laptops y monitores con Windows al 125-150 %)
+   ===================================================================== */
+/* Encabezado delgado: una línea para el título y los botones, otra para las pestañas */
+.top { padding-top: 6px; }
+.top-row { align-items: center; gap: 10px; }
+.brand h1 { font-size: 17px; }
+.brand p { display: none; }                 /* el subtítulo queda como texto de ayuda al pasar el mouse */
+.top-actions { gap: 6px; }
+.top .pill { padding: 3px 10px; }
+.top .btn-sm, .top .user-chip { padding-top: 3px; padding-bottom: 3px; }
+.tabs { margin-top: 4px; }
+.tabs a { padding: 6px 12px; font-size: 13px; border-radius: 8px 8px 0 0; }
+
+/* Pantallas de tabla: sin pie de página y sin márgenes de más; la altura se reparte con flex */
+body:has(#view.vista-fija) .foot { display: none; }
+#view.vista-fija { height: calc(100vh - var(--top-h, 76px)); padding: 8px clamp(10px, 1.6vw, 24px); gap: 8px; }
+.vista-fija > .card { margin: 0; }
+.vista-fija .card-filtros { padding: 8px 12px; position: static; box-shadow: var(--shadow); }
+.vista-fija .card-head.compacta { margin-bottom: 4px; padding-bottom: 0; align-items: center; }
+.vista-fija .card-head.compacta h2 { font-size: 15px; }
+.vista-fija .head-actions { gap: 6px; }
+.vista-fija .head-actions .chk { font-size: 12.5px; }
+
+/* Filtros compactos: etiqueta chica, control de 30 px */
+.vista-fija .filters { gap: 4px 8px; }
+.vista-fija .flt { gap: 1px; min-width: 92px; flex: 1 1 110px; max-width: 190px; }
+.vista-fija .flt-wide { flex: 2 1 190px; max-width: 340px; }
+.vista-fija .flt label { font-size: 10px; letter-spacing: .2px; }
+.vista-fija .flt select, .vista-fija .flt input { padding: 4px 8px; font-size: 13px; border-radius: 7px; height: 30px; min-width: 0; }
+.vista-fija .flt-actions { flex: 0 0 auto; min-width: 0; max-width: none; align-self: flex-end; gap: 6px; flex-wrap: nowrap; }
+.filters.colapsado .flt-more { display: none; }
+.btn-mas .cnt { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 11px; text-align: center; }
+
+/* Tarjeta de la tabla: el resumen (KPIs) se abre arriba de la tabla y no la aplasta */
+.vista-fija .card-tabla { padding: 8px 10px 6px; }
+.resumen-panel { flex: 0 1 auto; max-height: 42vh; overflow: auto; margin-bottom: 8px; border-bottom: 1px solid var(--line-2); padding-bottom: 6px; }
+.resumen-panel .kpis { margin-bottom: 0; }
+.resumen-panel .card { box-shadow: none; margin-bottom: 8px; }
+
+/* Renglones de ~28 px, como una hoja de cálculo */
+.vista-fija .grid { font-size: 12.5px; }
+.vista-fija .grid th { padding: 5px 8px; font-size: 10.5px; }
+.vista-fija .grid td { padding: 3px 8px; line-height: 1.35; vertical-align: middle; }
+.vista-fija .grid .badge { padding: 1px 7px; font-size: 10.5px; }
+.vista-fija .grid .mod { padding: 1px 6px; font-size: 10.5px; }
+.vista-fija .grid .dias { padding: 0 6px; }
+.vista-fija .grid .sel input { width: 14px; height: 14px; }
+
+/* Pie de la tabla: resumen corto a la izquierda, avance y pantalla completa a la derecha */
+.vista-fija .card-tabla .pager { padding: 6px 2px 0; font-size: 12px; }
+.pager-izq { display: inline-flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; }
+.pager-izq b { color: var(--ink); } .pager-izq b.error { color: var(--critical); }
+.pager-pos { display: inline-flex; align-items: center; gap: 6px; }
+.pager .btn-sm { padding: 2px 9px; font-size: 11.5px; }
+
+/* Pantalla completa de la tabla */
+body.tabla-max .top { display: none; }
+body.tabla-max #view.vista-fija { height: 100vh; max-width: none; }
+body.tabla-max #view.vista-fija > .card:not(.card-tabla) { display: none; }
