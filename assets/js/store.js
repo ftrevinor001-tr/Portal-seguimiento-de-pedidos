@@ -98,7 +98,7 @@
     { k: 'fecha_asignacion', label: 'Fecha y hora de asignación', type: 'datetime', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'asignado_por', label: 'Asignado por (jefe de área)', type: 'text', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'categoria_ticket', label: 'Categoría de la cotización', type: 'select', list: 'CATEGORIA', mods: TK, sec: 'Etapas del ticket', folio: true },
-    { k: 'fecha_limite_cotizacion', label: 'Fecha límite de cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
+    { k: 'fecha_limite_cotizacion', label: 'Fecha límite de cotización (manual, opcional)', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'fecha_cotizacion_usuario', label: 'Fecha de entrega de la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'vigencia_dias', label: 'Vigencia de la cotización (días)', type: 'num', mods: TK, sec: 'Etapas del ticket', folio: true },
     { k: 'fecha_vence_cotizacion', label: 'Vence la cotización', type: 'date', mods: TK, sec: 'Etapas del ticket', folio: true },

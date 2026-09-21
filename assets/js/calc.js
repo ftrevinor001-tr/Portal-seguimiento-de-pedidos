@@ -172,6 +172,85 @@
     return est < hoy ? 'PEND_VENCIDA' : 'PEND_EN_PLAZO';
   };
 
+  /* ------------------ Horario laboral (v1.7.0) ------------------
+     La jornada es de 8:00 a 13:30 y de 15:00 a 18:00 (8.5 horas) de lunes a viernes,
+     sin los días inhábiles del catálogo. Todo el reloj de los tickets corre sobre este
+     horario: un ticket levantado el viernes a las 17:00 solo consume 1 hora ese día y
+     sigue contando el lunes a las 8:00. Se puede cambiar en config.js con HORARIO. */
+  const hm = (t) => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
+  const dosD = (n) => String(n).padStart(2, '0');
+  const enMin = (dt) => { const s = U.isoDateTime(dt); return s ? { dia: s.slice(0, 10), min: +s.slice(11, 13) * 60 + +s.slice(14, 16) } : null; };
+  const armaDT = (dia, min) => `${dia}T${dosD(Math.floor(min / 60))}:${dosD(Math.round(min % 60))}:00`;
+  const antes = (a, b) => a.dia < b.dia || (a.dia === b.dia && a.min < b.min);
+
+  C.HORARIO = function () {
+    const cfg = CFG().HORARIO || {};
+    const tramos = (cfg.jornada || [['08:00', '13:30'], ['15:00', '18:00']])
+      .map((t) => [hm(t[0]), hm(t[1])]).filter((t) => t[1] > t[0]).sort((a, b) => a[0] - b[0]);
+    const minutos = tramos.reduce((s, t) => s + (t[1] - t[0]), 0);
+    return { tramos, minutos, horas: minutos / 60, inicio: tramos.length ? tramos[0][0] : 0, fin: tramos.length ? tramos[tramos.length - 1][1] : 0 };
+  };
+  /** Horas laborales de un día completo (8.5 con el horario actual) */
+  C.horasDia = () => C.HORARIO().horas;
+  /** Días de cotización → horas hábiles */
+  C.diasAHoras = (d) => (d === null || d === undefined || isNaN(d)) ? null : Number(d) * C.horasDia();
+
+  /** Primer instante hábil a partir de una fecha/hora (si ya es hábil, la misma) */
+  C.inicioHabil = function (dt, hol) {
+    const p = enMin(dt); if (!p) return null;
+    const { tramos } = C.HORARIO();
+    let dia = p.dia, min = p.min, g = 0;
+    while (g++ < 1000) {
+      if (U.isBusiness(dia, hol)) {
+        for (const [a, b] of tramos) { if (min <= a) return armaDT(dia, a); if (min < b) return armaDT(dia, min); }
+      }
+      dia = U.addDays(dia, 1); min = 0;
+    }
+    return null;
+  };
+  /** Fin del horario del día (18:00): sirve para las fechas capturadas sin hora */
+  C.finDelDia = (dia) => `${U.iso(dia)}T${dosD(Math.floor(C.HORARIO().fin / 60))}:${dosD(C.HORARIO().fin % 60)}:00`;
+
+  /** Horas hábiles transcurridas entre dos fechas/horas (negativo si van al revés) */
+  C.horasHabiles = function (a, b, hol) {
+    const pa = enMin(a), pb = enMin(b); if (!pa || !pb) return null;
+    if (antes(pb, pa)) { const r = C.horasHabiles(b, a, hol); return r === null ? null : -r; }
+    const { tramos } = C.HORARIO();
+    let min = 0, dia = pa.dia, g = 0;
+    while (dia <= pb.dia && g++ < 4000) {
+      if (U.isBusiness(dia, hol)) {
+        const desde = dia === pa.dia ? pa.min : 0;
+        const hasta = dia === pb.dia ? pb.min : 1440;
+        for (const [x, y] of tramos) min += Math.max(0, Math.min(y, hasta) - Math.max(x, desde));
+      }
+      dia = U.addDays(dia, 1);
+    }
+    return min / 60;
+  };
+  /** Fecha/hora resultante de sumar horas hábiles (el reloj arranca en el siguiente instante hábil) */
+  C.sumaHorasHabiles = function (dt, horas, hol) {
+    if (horas === null || horas === undefined || isNaN(horas)) return null;
+    const ini = C.inicioHabil(dt, hol); if (!ini) return null;
+    let resta = Math.round(Number(horas) * 60);
+    if (resta <= 0) return ini;
+    const { tramos } = C.HORARIO();
+    const p = enMin(ini);
+    let dia = p.dia, min = p.min, g = 0;
+    while (g++ < 4000) {
+      if (U.isBusiness(dia, hol)) {
+        for (const [a, b] of tramos) {
+          const desde = Math.max(a, min);
+          if (desde >= b) continue;
+          const disp = b - desde;
+          if (resta <= disp) return armaDT(dia, desde + resta);
+          resta -= disp;
+        }
+      }
+      dia = U.addDays(dia, 1); min = 0;
+    }
+    return null;
+  };
+
   /* ------------------ Etapas del TICKET (v1.3.0) ------------------ */
   /* Réplica del "REPORTE DE TICKETS 2026":
      1 Asignación   solicitud (fecha+hora) → asignación (fecha+hora)   [horas]
@@ -181,16 +260,18 @@
      4 Autorización entrega de la cotización → autorización de compra (usuario)
      5 Pago         autorización → pago al proveedor
      6 Llegada      pago (o autorización) → llegada real, contra la fecha estimada de llegada   */
+  /* v1.7.0: las etapas 1 a 5 se miden en HORAS HÁBILES (8.5 h por día laboral).
+     La etapa 6 (llegada del proveedor) y la vigencia de la cotización siguen en días. */
   C.METAS_TICKET = () => Object.assign({
-    asignacion_horas: 24, cotizacion: 3, recotizacion: 2, autorizacion: 3, pago: 2, entrega: 15,
-    vigencia: 15, avisar_vence: 3,
+    asignacion_horas: 8.5, cotizacion: 3, recotizacion_horas: 17, autorizacion_horas: 25.5,
+    pago_horas: 17, entrega: 15, vigencia: 15, avisar_vence: 3,
   }, CFG().METAS_TICKET || {});
   C.ETAPAS_TICKET = [
     { k: 'asignacion', n: 1, label: 'Asignación', quien: 'Jefe de área', desc: 'Del ticket levantado a la asignación del comprador', unidad: 'h' },
-    { k: 'cotizacion', n: 2, label: 'Cotización', quien: 'Comprador', desc: 'De la asignación a la entrega de la cotización al usuario', unidad: 'd' },
-    { k: 'recotizacion', n: 3, label: 'Recotización', quien: 'Comprador', desc: 'Solo si la cotización vence sin autorización del usuario', unidad: 'd' },
-    { k: 'autorizacion', n: 4, label: 'Autorización', quien: 'Usuario', desc: 'De la cotización entregada a la autorización de compra', unidad: 'd' },
-    { k: 'pago', n: 5, label: 'Pago', quien: 'Administración', desc: 'De la autorización de compra al pago del proveedor', unidad: 'd' },
+    { k: 'cotizacion', n: 2, label: 'Cotización', quien: 'Comprador', desc: 'De la asignación a la entrega de la cotización al usuario', unidad: 'h' },
+    { k: 'recotizacion', n: 3, label: 'Recotización', quien: 'Comprador', desc: 'Solo si la cotización vence sin autorización del usuario', unidad: 'h' },
+    { k: 'autorizacion', n: 4, label: 'Autorización', quien: 'Usuario', desc: 'De la cotización entregada a la autorización de compra', unidad: 'h' },
+    { k: 'pago', n: 5, label: 'Pago', quien: 'Administración', desc: 'De la autorización de compra al pago del proveedor', unidad: 'h' },
     { k: 'entrega', n: 6, label: 'Llegada', quien: 'Proveedor', desc: 'Del pago a la llegada del artículo a SANVER', unidad: 'd' },
   ];
   C.ETAPA_LABEL = Object.fromEntries(C.ETAPAS_TICKET.map((e) => [e.k, e.label]));
@@ -199,20 +280,26 @@
 
   /** Días hábiles transcurridos entre dos fechas (mismo día = 0) */
   C.diasHabiles = (a, b, hol) => (!a || !b) ? null : Math.max(0, U.networkdays(a, b, hol) - 1);
-  /** Horas transcurridas entre solicitud y asignación (como la fórmula del reporte) */
-  C.tiempoAsignacionHoras = function (p) {
+  /** Horas corridas entre dos fechas/horas (reloj de pared, como la fórmula del Excel) */
+  C.horasCorridas = function (a, b) {
+    const x = U.isoDateTime(a), y = U.isoDateTime(b);
+    if (!x || !y) return null;
+    return (new Date(y.replace(' ', 'T')) - new Date(x.replace(' ', 'T'))) / 3600000;
+  };
+  /** Horas HÁBILES entre la solicitud y la asignación del ticket (v1.7.0) */
+  C.tiempoAsignacionHoras = function (p, hol) {
     const a = U.isoDateTime(p.fecha_solicitud), b = U.isoDateTime(p.fecha_asignacion);
     if (!a || !b) return null;
-    return (new Date(b.replace(' ', 'T')) - new Date(a.replace(' ', 'T'))) / 3600000;
+    return C.horasHabiles(a, b, hol);
   };
   C.textoHoras = function (h) {
     if (h === null || h === undefined || isNaN(h)) return '';
     const neg = h < 0, t = Math.abs(h), hh = Math.floor(t), mm = Math.round((t - hh) * 60);
     return `${neg ? '-' : ''}${mm === 60 ? hh + 1 : hh}:${String(mm === 60 ? 0 : mm).padStart(2, '0')}`;
   };
-  /** VALIDACION TIEMPO del reporte */
+  /** VALIDACION TIEMPO del reporte (se revisa con el reloj de pared, no con el horario) */
   C.validacionTiempo = function (p) {
-    const h = C.tiempoAsignacionHoras(p);
+    const h = C.horasCorridas(p.fecha_solicitud, p.fecha_asignacion);
     if (h === null) return 'PENDIENTE DE ASIGNACION';
     return h < 0 ? 'REVISAR FECHA/HORA' : 'OK';
   };
@@ -223,23 +310,48 @@
     const hit = (cats || []).find((x) => up(x.categoria) === c && x.activo !== false);
     return hit ? Number(hit.dias) : null;
   };
-  /** FECHA FINAL COTIZACIÓN = fecha de solicitud + días hábiles de la categoría */
-  C.fechaLimiteCotizacion = function (p, cats, hol) {
-    const cap = U.iso(p.fecha_limite_cotizacion); if (cap) return cap;
-    const fs = U.iso(p.fecha_solicitud); if (!fs) return null;
+  /** Horas hábiles de cotización que le tocan al ticket según su categoría */
+  C.horasCotizacion = function (p, cats) {
     const d = C.diasCategoria(p.categoria_ticket, cats);
-    return d === null || isNaN(d) ? null : U.addWorkdays(fs, d, hol);
+    return d === null || isNaN(d) ? null : C.diasAHoras(d);
   };
-  /** ALERTA COTIZACION (misma lógica del Excel) */
-  C.alertaCotizacionTicket = function (p, hoy, cats, hol) {
+  /**
+   * FECHA Y HORA LÍMITE DE COTIZACIÓN (v1.7.0)
+   * = solicitud + (días de la categoría × 8.5) horas hábiles, sobre el horario de 8:00-13:30
+   *   y 15:00-18:00 de lunes a viernes. Si se capturó a mano una fecha límite, esa manda
+   *   (y se entiende como el cierre de ese día).
+   */
+  C.fechaLimiteCotizacion = function (p, cats, hol) {
+    const cap = U.iso(p.fecha_limite_cotizacion);
+    if (cap) { const dt = U.isoDateTime(p.fecha_limite_cotizacion); return dt && dt.slice(11) !== '00:00:00' ? dt : C.finDelDia(cap); }
+    const fs = U.isoDateTime(p.fecha_solicitud); if (!fs) return null;
+    const h = C.horasCotizacion(p, cats);
+    return h === null ? null : C.sumaHorasHabiles(fs, h, hol);
+  };
+  /** Horas hábiles que faltan (o sobran, en negativo) para la fecha límite de cotización */
+  C.restanteCotizacion = function (p, cats, hol, ahora) {
+    if (C.cancelado(p) || U.iso(p.fecha_cotizacion_usuario)) return null;
+    const lim = C.fechaLimiteCotizacion(p, cats, hol); if (!lim) return null;
+    return C.horasHabiles(ahora || U.isoDateTime(new Date()), lim, hol);
+  };
+  /** ALERTA COTIZACION: ahora contra la fecha y hora límite */
+  C.alertaCotizacionTicket = function (p, hoy, cats, hol, ahora) {
     if (C.cancelado(p)) return 'CANCELADO';
     const lim = C.fechaLimiteCotizacion(p, cats, hol);
     if (!lim) return 'SIN FECHA LIMITE';
+    const dLim = U.iso(lim);
     const ent = U.iso(p.fecha_cotizacion_usuario);
-    if (ent) return ent > lim ? 'FUERA DEL PLAZO' : 'FINALIZADO';
-    if (hoy > lim) return 'FUERA DEL PLAZO';
-    if (hoy === lim) return 'VENCE HOY';
-    return U.diffDays(lim, hoy) === 1 ? 'POR VENCER' : 'EN TIEMPO';
+    if (ent) {
+      const entDT = U.isoDateTime(p.fecha_cotizacion_usuario);
+      // Si la entrega se capturó sin hora se comparan solo las fechas (no se castiga la falta de hora)
+      const tarde = entDT && entDT.slice(11) !== '00:00:00' ? entDT > lim : ent > dLim;
+      return tarde ? 'FUERA DEL PLAZO' : 'FINALIZADO';
+    }
+    const now = ahora || U.isoDateTime(new Date());
+    if (now > lim) return 'FUERA DEL PLAZO';
+    if (dLim === (hoy || U.iso(now))) return 'VENCE HOY';
+    const faltan = C.horasHabiles(now, lim, hol);
+    return faltan !== null && faltan <= C.horasDia() ? 'POR VENCER' : 'EN TIEMPO';
   };
   /** ALERTA COMPRA (misma lógica del Excel) */
   C.alertaCompraTicket = function (p, hoy) {
@@ -274,8 +386,9 @@
    * Etapas del ticket. Devuelve { etapas, actual, alertaCotizacion, alertaCompra, limite, vence, venceEn,
    * recotizaActiva, horasAsignacion, diasFuera, validacion, total }
    */
-  C.etapasTicket = function (p, hoy, hol, cats) {
+  C.etapasTicket = function (p, hoy, hol, cats, ahora) {
     const metas = C.METAS_TICKET();
+    const now = ahora || U.isoDateTime(new Date());
     const solicitud = U.iso(p.fecha_solicitud), asign = U.iso(p.fecha_asignacion);
     const cot = U.iso(p.fecha_cotizacion_usuario), recot = U.iso(p.fecha_recotizacion_usuario);
     const aut = U.iso(p.fecha_autorizacion_compra), pago = U.iso(p.fecha_pago_proveedor);
@@ -286,24 +399,30 @@
     const cancelado = C.cancelado(p);
     // La etapa 3 solo se activa si la cotización venció sin autorización de compra
     const recotizaActiva = !aut && !!vence && (vence < hoy || !!recot);
-    const metaCot = C.diasCategoria(p.categoria_ticket, cats) ?? metas.cotizacion;
-    const horas = C.tiempoAsignacionHoras(p);
+    // Metas en horas hábiles (la cotización, según los días de su categoría)
+    const metaCot = C.horasCotizacion(p, cats) ?? C.diasAHoras(metas.cotizacion);
+    const horas = C.tiempoAsignacionHoras(p, hol);
+    // Los extremos de cada etapa se manejan con fecha y hora; las fechas sin hora arrancan al abrir (8:00)
+    const dtSol = U.isoDateTime(p.fecha_solicitud), dtAsig = U.isoDateTime(p.fecha_asignacion);
     const tramos = [
-      { k: 'asignacion', ini: solicitud, fin: asign, horas: true, meta: metas.asignacion_horas },
-      { k: 'cotizacion', ini: asign || solicitud, fin: cot, meta: metaCot },
-      { k: 'recotizacion', ini: recotizaActiva ? vence : null, fin: recot, meta: metas.recotizacion },
-      { k: 'autorizacion', ini: recot || cot, fin: aut, meta: metas.autorizacion },
-      { k: 'pago', ini: aut, fin: pago, meta: metas.pago },
+      { k: 'asignacion', ini: solicitud, fin: asign, dtIni: dtSol, dtFin: dtAsig, meta: metas.asignacion_horas },
+      { k: 'cotizacion', ini: asign || solicitud, fin: cot, dtIni: dtAsig || dtSol, meta: metaCot },
+      { k: 'recotizacion', ini: recotizaActiva ? vence : null, fin: recot, meta: metas.recotizacion_horas },
+      { k: 'autorizacion', ini: recot || cot, fin: aut, meta: metas.autorizacion_horas },
+      { k: 'pago', ini: aut, fin: pago, meta: metas.pago_horas },
       { k: 'entrega', ini: pago || aut, fin: llegada, meta: metas.entrega },
     ];
     const etapas = tramos.map((t) => {
       const def = C.ETAPAS_TICKET.find((e) => e.k === t.k);
+      const enHoras = def.unidad === 'h';
+      const ini = t.dtIni || (t.ini ? U.isoDateTime(t.ini) : null);
+      const fin = t.dtFin || (t.fin ? U.isoDateTime(t.fin) : null);
       let estado, dias = null;
       if (cancelado && !t.fin) estado = 'CANCELADA';
-      else if (t.fin && t.ini) { estado = 'HECHA'; dias = t.horas ? horas : C.diasHabiles(t.ini, t.fin, hol); }
+      else if (t.fin && t.ini) { estado = 'HECHA'; dias = enHoras ? Math.max(0, C.horasHabiles(ini, fin, hol)) : C.diasHabiles(t.ini, t.fin, hol); }
       else if (t.ini) {
         estado = 'EN CURSO';
-        dias = t.horas ? Math.max(0, (Date.now() - new Date(String(U.isoDateTime(p.fecha_solicitud) || t.ini).replace(' ', 'T'))) / 3600000) : C.diasHabiles(t.ini, hoy, hol);
+        dias = enHoras ? Math.max(0, C.horasHabiles(ini, now, hol)) : C.diasHabiles(t.ini, hoy, hol);
       }
       else estado = t.k === 'recotizacion' && !recotizaActiva ? 'INACTIVA' : 'PENDIENTE';
       const cumple = dias === null ? null : dias <= t.meta;
@@ -323,7 +442,9 @@
     const hechas = etapas.filter((e) => e.estado === 'HECHA');
     return {
       etapas, actual, limite, vence, vence2, vigente: vig, venceEn, recotizaActiva,
-      alertaCotizacion: C.alertaCotizacionTicket(p, hoy, cats, hol),
+      alertaCotizacion: C.alertaCotizacionTicket(p, hoy, cats, hol, now),
+      restanteCotizacion: C.restanteCotizacion(p, cats, hol, now),
+      horasCotizacion: metaCot, limiteCalculado: !U.iso(p.fecha_limite_cotizacion),
       alertaCompra: C.alertaCompraTicket(p, hoy),
       horasAsignacion: horas, validacion: C.validacionTiempo(p),
       diasFuera: C.diasFueraPlazoTicket(p, hoy), estimada: est,
@@ -336,7 +457,7 @@
   C.requiereRecotizar = (p, hoy, hol, cats) => p.modulo === 'TICKET' && C.etapasTicket(p, hoy, hol, cats).actual === 'POR RECOTIZAR';
 
   /** Agrega los campos calculados (prefijo _) a un pedido */
-  C.enriquecer = function (p, hoy, hol, cats) {
+  C.enriquecer = function (p, hoy, hol, cats, ahora) {
     p._alerta = C.alerta(p, hoy);
     p._incumplimiento = C.diasIncumplimiento(p, hoy, hol);
     p._dias_naturales = C.diasNaturales(p);
@@ -349,11 +470,11 @@
     p._costo_total = C.costoTotal(p);
     p._cumplimiento = C.cumplimiento(p, hoy);
     if (p.modulo === 'TICKET') {
-      const t = C.etapasTicket(p, hoy, hol, cats);
+      const t = C.etapasTicket(p, hoy, hol, cats, ahora);
       p._etapas = t; p._etapa = t.actual; p._vence_en = t.venceEn;
       p._alerta_cotizacion = t.alertaCotizacion; p._alerta_compra = t.alertaCompra;
       p._horas_asignacion = t.horasAsignacion; p._validacion_tiempo = t.validacion;
-      p._dias_fuera_plazo = t.diasFuera; p._limite_cotizacion = t.limite;
+      p._dias_fuera_plazo = t.diasFuera; p._limite_cotizacion = t.limite; p._restante_cotizacion = t.restanteCotizacion;
       p._dias_asignacion = t.dias.asignacion; p._dias_cotizacion = t.dias.cotizacion;
       p._dias_recotizacion = t.dias.recotizacion; p._dias_autorizacion = t.dias.autorizacion;
       p._dias_pago = t.dias.pago; p._dias_etapa_entrega = t.dias.entrega;

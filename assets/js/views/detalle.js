@@ -15,7 +15,10 @@
     const alertas = `<div class="etapas-alertas">
       <span class="badge badge-${cls(t.alertaCotizacion)}">Cotización: ${U.esc(t.alertaCotizacion)}</span>
       <span class="badge badge-${cls(t.alertaCompra)}">Compra: ${U.esc(t.alertaCompra)}</span>
-      ${t.limite ? `<span class="muted small">Fecha límite de cotización: <b>${U.fmtDate(t.limite)}</b></span>` : ''}
+      ${t.limite ? `<span class="muted small">Límite de cotización: <b>${U.fmtDateTime(t.limite)}</b>${t.limiteCalculado && t.horasCotizacion ? ` (${C.textoHoras(t.horasCotizacion)} h hábiles desde la solicitud)` : ''}</span>` : ''}
+      ${t.restanteCotizacion === null || t.restanteCotizacion === undefined ? '' : t.restanteCotizacion < 0
+        ? `<span class="badge badge-critical">Vencida hace ${C.textoHoras(-t.restanteCotizacion)} h hábiles</span>`
+        : `<span class="badge badge-${t.restanteCotizacion <= C.horasDia() ? 'warning' : 'ok'}">Faltan ${C.textoHoras(t.restanteCotizacion)} h hábiles</span>`}
       ${t.diasFuera ? `<span class="badge badge-critical">${t.diasFuera} día(s) fuera de plazo</span>` : ''}
       ${t.validacion !== 'OK' ? `<span class="muted small">${U.esc(t.validacion)}</span>` : ''}
     </div>`;
@@ -96,14 +99,16 @@
           const ini = form.querySelector('[name="fecha_estimada_inicio"]'); if (ini && fe.inicio) ini.value = fe.inicio;
         }
       }
-      // Fecha límite de cotización = fecha de solicitud + días hábiles de la categoría
+      // Fecha límite de cotización = solicitud + (días de la categoría × 8.5) horas hábiles.
+      // No se escribe en el campo: el portal la calcula sola; el campo es solo para forzarla a mano.
       if (esTicket && (k === 'categoria_ticket' || k === 'fecha_solicitud')) {
-        const cat = form.querySelector('[name="categoria_ticket"]'), lim = form.querySelector('[name="fecha_limite_cotizacion"]');
+        const cat = form.querySelector('[name="categoria_ticket"]');
         const dias = C.diasCategoria(cat ? cat.value : '', S.cat.cats);
-        if (lim && dias !== null) {
-          const base = form.querySelector('[name="fecha_solicitud"]');
-          const fs2 = U.iso(base ? base.value : p.fecha_solicitud);
-          if (fs2) { lim.value = U.addWorkdays(fs2, dias, S.hol); UI.toast(`Fecha límite de cotización: ${U.fmtDate(lim.value)} (${dias} días hábiles)`, 'info', 4000); }
+        const base = form.querySelector('[name="fecha_solicitud"]');
+        const fs2 = U.isoDateTime(base && base.value ? base.value : p.fecha_solicitud);
+        if (dias !== null && fs2) {
+          const lim = C.sumaHorasHabiles(fs2, C.diasAHoras(dias), S.hol);
+          if (lim) UI.toast(`Límite de cotización: ${U.fmtDateTime(lim)} (${dias} día(s) = ${C.textoHoras(C.diasAHoras(dias))} h hábiles)`, 'info', 5000);
         }
       }
       // Vencimiento de la cotización = fecha de entrega + vigencia (días naturales)

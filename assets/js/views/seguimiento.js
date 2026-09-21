@@ -159,7 +159,6 @@
             <div id="segResumen"><div id="segKpis"></div></div></section>
           <section class="card card-tabla"><div id="segTable"></div></section>`;
         filtros();
-        if (!S.cargado) { U.$('#segTable', c).innerHTML = UI.empty('Cargando…'); return; }
         // El resumen se puede ocultar para que la tabla ocupe toda la pantalla (se recuerda por pestaña)
         let abierto = true;
         try { abierto = localStorage.getItem(`sp_seg_kpis_${nav}`) !== '0'; } catch { /* sin storage */ }
@@ -174,7 +173,8 @@
           try { localStorage.setItem(`sp_seg_kpis_${nav}`, abierto ? '1' : '0'); } catch { /* sin storage */ }
           pintarResumen(); draw();
         };
-        draw();
+        // Los botones se conectan siempre, aunque los datos todavía estén cargando
+        if (S.cargado) draw(); else U.$('#segTable', c).innerHTML = UI.empty('Cargando…');
         const bNuevo = U.$('#btnNuevo', c); if (bNuevo) bNuevo.onclick = () => APP.nuevoPedido(tipoNuevo);
         const bEntrar = U.$('#btnEntrarSeg', c); if (bEntrar) bEntrar.onclick = () => APP.entrar();
         U.$('#btnXls', c).onclick = exportar;

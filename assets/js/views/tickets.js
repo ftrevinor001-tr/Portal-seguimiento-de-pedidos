@@ -26,6 +26,7 @@
         f_cot: U.iso(p.fecha_cotizacion_usuario), f_aut: U.iso(p.fecha_autorizacion_compra),
         f_pago: U.iso(p.fecha_pago_proveedor), f_est: U.iso(p.fecha_estimada), f_fin: U.iso(p.fecha_real_llegada),
         horas: t.horasAsignacion, alerta_cot: t.alertaCotizacion, alerta_compra: t.alertaCompra,
+        restante: t.restanteCotizacion, metaCot: t.horasCotizacion,
         fuera: t.diasFuera, total: t.total, venceEn: t.venceEn, vigente: t.vigente, limite: t.limite,
       };
     });
@@ -73,7 +74,10 @@
     { k: 'f_asig', label: 'F. asignación', cls: 'nowrap', render: (r) => U.fmtDate(r.f_asig) },
     { k: 'h_asig', label: 'Hora asignación', cls: 'nowrap' },
     { k: 'horas', label: 'Tiempo de asignación', cls: 'num', render: (r) => celda(r, 'asignacion'), sort: (r) => r.horas },
-    { k: 'limite', label: 'F. límite cotiz.', cls: 'nowrap', render: (r) => U.fmtDate(r.limite) },
+    { k: 'limite', label: 'F. y hora límite cotiz.', cls: 'nowrap', width: '150px', render: (r) => U.fmtDateTime(r.limite) },
+    { k: 'restante', label: 'Restante cotiz.', cls: 'num nowrap', render: (r) => r.restante === null || r.restante === undefined ? ''
+      : r.restante < 0 ? `<span class="dias dias-mal" title="Horas hábiles vencidas">-${C.textoHoras(-r.restante)} h</span>`
+      : `<span class="dias ${r.restante <= C.horasDia() ? 'dias-tarde' : 'dias-curso'}" title="Horas hábiles que faltan para la fecha límite">${C.textoHoras(r.restante)} h</span>` },
     { k: 'f_cot', label: 'F. entrega cotiz.', cls: 'nowrap', render: (r) => U.fmtDate(r.f_cot) },
     { k: 'd2', label: '2 Cotización', cls: 'num', render: (r) => celda(r, 'cotizacion'), sort: (r) => r.t.dias.cotizacion },
     { k: 'alerta_cot', label: 'Alerta cotización', width: '150px', render: (r) => badge(r.alerta_cot) },
@@ -113,16 +117,17 @@
       const curso = rows.filter((r) => { const e = r.t.etapas.find((x) => x.k === def.k); return e && e.estado === 'EN CURSO'; }).length;
       const vals = es.map((e) => e.dias);
       const dentro = es.filter((e) => e.cumple).length;
-      const meta = es.length ? es[0].meta : (def.k === 'asignacion' ? C.METAS_TICKET().asignacion_horas : C.METAS_TICKET()[def.k]);
+      const m = C.METAS_TICKET();
+      const meta = es.length ? es[0].meta : (def.unidad === 'h' ? (m[`${def.k}_horas`] ?? C.diasAHoras(m[def.k])) : m[def.k]);
       return { def, n: es.length, curso, prom: vals.length ? U.sum(vals) / vals.length : null, max: vals.length ? Math.max(...vals) : null, pct: es.length ? dentro / es.length : null, meta };
     });
     const fmt = (def, v) => v === null ? '—' : def.unidad === 'h' ? `${C.textoHoras(v)} h` : `${v.toFixed ? v.toFixed(1) : v} d`;
-    return `<section class="card"><div class="card-head"><h2>Tiempo por etapa</h2><p class="muted">La asignación se mide en horas (como el reporte); las demás etapas en días hábiles. Las metas se ajustan en <code>config.js</code> con <code>METAS_TICKET</code> y los días de cotización en Catálogos → Categorías de tickets.</p></div>
+    return `<section class="card"><div class="card-head"><h2>Tiempo por etapa</h2><p class="muted">Las etapas 1 a 5 se miden en <b>horas hábiles</b> (jornada de 8:00 a 13:30 y de 15:00 a 18:00 = 8.5 h, de lunes a viernes, sin días inhábiles); la llegada del proveedor sigue en días. Los días de cotización de cada categoría se convierten a horas (1 día = 8.5 h) y se ajustan en Catálogos → Categorías de tickets; las metas, en <code>config.js</code> con <code>METAS_TICKET</code>.</p></div>
       <div class="table-wrap"><table class="grid"><thead><tr><th>Etapa</th><th>Se mide</th><th>Responsable</th><th class="num">Meta</th><th class="num">Tickets medidos</th><th class="num">Promedio</th><th class="num">Máximo</th><th class="num">Dentro de meta</th><th class="num">En curso</th></tr></thead><tbody>
       ${filas.map((f) => `<tr><td><b>${f.def.n}. ${U.esc(f.def.label)}</b></td><td class="muted">${U.esc(f.def.desc)}</td><td>${U.esc(f.def.quien)}</td>
         <td class="num">${f.meta}${f.def.unidad === 'h' ? ' h' : ' d'}</td><td class="num">${U.fmtNum(f.n)}</td>
         <td class="num"><b>${fmt(f.def, f.prom)}</b></td><td class="num">${fmt(f.def, f.max)}</td>
-        <td class="num">${f.pct === null ? '—' : `<span class="badge badge-${f.pct >= 0.8 ? 'ok' : f.pct >= 0.5 ? 'warning' : 'critical'}">${U.fmtPct(f.pct, 0)}</span>`}</td>
+        <td class="num">${f.pct === null ? '—' : `<span class="badge badge-${f.pct >= 0.8 ? 'ok' : f.pct >= 0.5 ? 'warning' : 'critical'}">${U.fmtPct(f.pct, f.pct === 1 ? 0 : 1)}</span>`}</td>
         <td class="num">${U.fmtNum(f.curso)}</td></tr>`).join('')}
       </tbody></table></div></section>`;
   }
@@ -186,8 +191,10 @@
         { header: 'HORA DE SOLICITUD', value: (r) => (U.isoDateTime(r.p.fecha_solicitud) || '').slice(11, 16) },
         { header: 'FECHA ASIGNACION', value: (r) => U.iso(r.p.fecha_asignacion), type: 'date' },
         { header: 'HORA DE ASIGNACION', value: (r) => (U.isoDateTime(r.p.fecha_asignacion) || '').slice(11, 16) },
-        { header: 'TIEMPO DE ASIGNACION (H)', value: (r) => r.horas === null ? '' : Number(r.horas.toFixed(2)), type: 'number' },
-        { header: 'FECHA FINAL COTIZACION', value: (r) => r.limite, type: 'date' },
+        { header: 'TIEMPO DE ASIGNACION (H HABILES)', value: (r) => r.horas === null ? '' : Number(r.horas.toFixed(2)), type: 'number' },
+        { header: 'FECHA Y HORA LIMITE COTIZACION', value: (r) => r.limite, type: 'datetime', width: 20 },
+        { header: 'HORAS HABILES RESTANTES COTIZACION', value: (r) => r.restante === null || r.restante === undefined ? '' : Number(r.restante.toFixed(2)), type: 'number' },
+        { header: 'META COTIZACION (H HABILES)', value: (r) => r.metaCot ?? '', type: 'number' },
         { header: 'FECHA ENTREGA COTIZACION', value: (r) => U.iso(r.p.fecha_cotizacion_usuario), type: 'date' },
         { header: 'ALERTA COTIZACION', value: (r) => r.alerta_cot },
         { header: 'FECHA RECOTIZACION', value: (r) => U.iso(r.p.fecha_recotizacion_usuario), type: 'date' },
@@ -200,9 +207,10 @@
         { header: 'COMENTARIOS', value: (r) => r.p.comentarios || '' },
         { header: 'VALIDACION TIEMPO', value: (r) => r.t.validacion },
         { header: 'DIAS FUERA DE PLAZO', value: (r) => r.fuera, type: 'number' },
-        { header: 'DIAS 2 COTIZACION', value: (r) => r.t.dias.cotizacion, type: 'number' },
-        { header: 'DIAS 4 AUTORIZACION', value: (r) => r.t.dias.autorizacion, type: 'number' },
-        { header: 'DIAS 5 PAGO', value: (r) => r.t.dias.pago, type: 'number' },
+        { header: 'HORAS 2 COTIZACION', value: (r) => r.t.dias.cotizacion, type: 'number' },
+        { header: 'HORAS 3 RECOTIZACION', value: (r) => r.t.dias.recotizacion, type: 'number' },
+        { header: 'HORAS 4 AUTORIZACION', value: (r) => r.t.dias.autorizacion, type: 'number' },
+        { header: 'HORAS 5 PAGO', value: (r) => r.t.dias.pago, type: 'number' },
         { header: 'DIAS 6 LLEGADA', value: (r) => r.t.dias.entrega, type: 'number' },
       ];
       await XL.exportar([{ name: 'Tickets', columns, rows }], `tickets_${S.hoy}.xlsx`);
@@ -220,11 +228,10 @@
           <div id="tkFilters"></div></section>
         <section class="card card-resumen"><div class="resumen-toggle"><b>Resumen</b><span class="muted small" id="tkResumenMini"></span><button class="btn btn-light btn-sm" id="tkVerResumen">Ver resumen ▾</button></div>
           <div id="tkResumen" hidden>
-            <p class="muted small">Etapas: <b>1 Asignación</b> (horas del jefe de área) · <b>2 Cotización</b> (contra la fecha límite de la categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
+            <p class="muted small">Etapas: <b>1 Asignación</b> (jefe de área) · <b>2 Cotización</b> (contra la fecha y hora límite de su categoría) · <b>3 Recotización</b> (si vence sin autorización) · <b>4 Autorización</b> del usuario · <b>5 Pago</b> al proveedor · <b>6 Llegada</b> a SANVER. Las etapas 1 a 5 se miden en horas hábiles (8:00-13:30 y 15:00-18:00, de lunes a viernes). Las fechas se capturan en el detalle de cualquier renglón del ticket.</p>
             <div id="tkKpis"></div><div id="tkFlujo"></div><div id="tkEtapas"></div></div>
         </section>
         <section class="card card-tabla"><div id="tkTable"></div></section>`;
-      if (!S.cargado) { U.$('#tkTable', c).innerHTML = UI.empty('Cargando…'); return; }
       filtros();
       let abierto = false;
       try { abierto = localStorage.getItem('sp_tk_resumen') === '1'; } catch { /* sin storage */ }
@@ -239,7 +246,8 @@
         pintarResumen(); draw();
       };
       pintarResumen();
-      draw();
+      // Los botones se conectan siempre, aunque los datos todavía estén cargando
+      if (S.cargado) draw(); else U.$('#tkTable', c).innerHTML = UI.empty('Cargando…');
       U.$('#tkXls', c).onclick = exportar;
       const nuevo = U.$('#tkNuevo', c); if (nuevo) nuevo.onclick = () => APP.nuevoPedido('TICKET');
     },
