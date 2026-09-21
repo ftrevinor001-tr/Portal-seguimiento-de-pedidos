@@ -2,7 +2,7 @@
    Uso: node tests/tickets.test.js "REPORTE DE TICKETS 2026.xlsx" [YYYY-MM-DD]
    La fecha es el día en que el Excel recalculó sus fórmulas (TODAY()); por default 2026-09-18. */
 global.JSZip = require('../assets/js/vendor/jszip.min.js');
-global.SP_CONFIG = { METAS_TICKET: { asignacion_horas: 24 } };
+global.SP_CONFIG = {};
 const U = require('../assets/js/util.js'); global.U = U;
 const C = require('../assets/js/calc.js');
 const XL = require('../assets/js/xlsx-lite.js');
@@ -41,9 +41,13 @@ const conHora = (f, h) => { const d = U.iso(f); if (!d) return null; const t = h
     },
   }));
 
-  const cmp = { cot: [0, 0, []], compra: [0, 0, []], val: [0, 0, []], fuera: [0, 0, []], horas: [0, 0, []] };
+  const cmp = { cot: [0, 0, []], compra: [0, 0, []], val: [0, 0, []], fuera: [0, 0, []] };
+  // v1.7.0: el tiempo de asignación pasó a HORAS HÁBILES, así que ya no coincide con el reloj
+  // de pared del Excel. Se revisa que nunca sea mayor y se reporta cuánto baja.
+  const has = { n: 0, menor: 0, sumaXls: 0, sumaApp: 0, meta: 0, ej: [] };
+  const AHORA = `${HOY}T12:00:00`;
   for (const p of pedidos) {
-    const t = C.etapasTicket(p, HOY, hol, cats);
+    const t = C.etapasTicket(p, HOY, hol, cats, AHORA);
     const x = p._xls;
     const check = (k, esperado, obtenido) => {
       if (esperado === '' || esperado === null || esperado === undefined) return;
@@ -55,9 +59,15 @@ const conHora = (f, h) => { const d = U.iso(f); if (!d) return null; const t = h
     check('compra', x.compra, t.alertaCompra);
     check('val', x.val, t.validacion);
     if (x.fuera !== null && x.fuera !== undefined && x.fuera !== '') check('fuera', Number(x.fuera), t.diasFuera);
-    if (typeof x.horas === 'number') check('horas', Math.round(x.horas * 1440), Math.round(t.horasAsignacion * 60));
+    if (typeof x.horas === 'number' && t.horasAsignacion !== null) {
+      const xls = x.horas * 24, app = t.horasAsignacion;
+      has.n++; has.sumaXls += xls; has.sumaApp += app;
+      if (app <= xls + 0.001) has.menor++;
+      else if (has.ej.length < 6) has.ej.push(`${p.folio_pedido}: corridas=${xls.toFixed(1)} hábiles=${app.toFixed(1)}`);
+      if (app <= C.METAS_TICKET().asignacion_horas) has.meta++;
+    }
   }
-  const nombre = { cot: 'ALERTA COTIZACION', compra: 'ALERTA COMPRA', val: 'VALIDACION TIEMPO', fuera: 'DÍAS FUERA DE PLAZO', horas: 'TIEMPO DE ASIGNACION' };
+  const nombre = { cot: 'ALERTA COTIZACION', compra: 'ALERTA COMPRA', val: 'VALIDACION TIEMPO', fuera: 'DÍAS FUERA DE PLAZO' };
   console.log(`Reporte de tickets · ${pedidos.length} renglones · hoy = ${HOY}\n`);
   let fails = 0;
   for (const k of Object.keys(cmp)) {
@@ -67,10 +77,19 @@ const conHora = (f, h) => { const d = U.iso(f); if (!d) return null; const t = h
     if (ej.length) { console.log('   diferencias:', ej.join(' | ')); }
     if (n && ok / n < 0.95) fails++;
   }
-  // Fecha límite calculada con la categoría (no viene en el reporte: se revisa la regla con días fijos)
+  // Tiempo de asignación: horas hábiles contra las horas corridas del Excel (v1.7.0)
+  console.log(`\nTIEMPO DE ASIGNACION · ${has.n} tickets medidos`);
+  console.log(`   promedio Excel (horas corridas) ${(has.sumaXls / has.n).toFixed(1)} h → app (horas hábiles) ${(has.sumaApp / has.n).toFixed(1)} h`);
+  console.log(`   nunca mayor que el reloj de pared: ${has.menor}/${has.n} ${has.menor === has.n ? 'OK' : 'ERROR'}`);
+  if (has.ej.length) console.log('   casos raros:', has.ej.join(' | '));
+  console.log(`   dentro de la meta de ${C.METAS_TICKET().asignacion_horas} h hábiles: ${has.meta}/${has.n} = ${(100 * has.meta / has.n).toFixed(1)}%`);
+  if (has.menor !== has.n) fails++;
+
+  // Fecha y hora límite calculada con la categoría (no viene en el reporte)
   const base = { modulo: 'TICKET', fecha_solicitud: '2026-07-13', categoria_ticket: 'LICENCIAS Y SOFTWARE' };
   const lim = C.fechaLimiteCotizacion(base, cats, hol);
-  console.log(`\nFecha límite (solicitud 13/07 + 3 días hábiles de "Licencias y software") = ${lim} ${lim === '2026-07-16' ? 'OK' : 'ERROR'}`);
-  if (lim !== '2026-07-16') fails++;
+  const esperado = '2026-07-15T18:00:00'; // lunes 13/07 8:00 + 25.5 h hábiles (3 días × 8.5)
+  console.log(`\nLímite de cotización (solicitud 13/07 + 3 días de "Licencias y software" = 25.5 h hábiles) = ${lim} ${lim === esperado ? 'OK' : `ERROR, esperado ${esperado}`}`);
+  if (lim !== esperado) fails++;
   process.exit(fails ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(2); });
