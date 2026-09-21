@@ -199,15 +199,118 @@
     Object.assign(S.cat, { te, td, dnr, inh, listas, cats });
     S.refreshHol();
   };
-  S.loadAll = async function (onProgress) {
-    S.hoy = U.today();
-    await S.loadCatalogos();
-    const rows = await API.selectAll('sp_v_pedidos', { filters: [['activo', 'eq', 'true']], order: 'id' }, onProgress);
+  /* ------------------ Copia local (v1.9.1) ------------------
+     La base se guarda en el navegador (IndexedDB). Al abrir el portal se muestra al instante esa
+     copia y en segundo plano se pregunta a Supabase qué cambió: solo se descargan los renglones
+     modificados desde la última vez. Si algo no cuadra, se descarga todo de nuevo. */
+  const CACHE_VER = 1;
+  const Cache = (() => {
+    const abrir = () => new Promise((res, rej) => {
+      if (!root.indexedDB) { rej(new Error('sin IndexedDB')); return; }
+      const r = indexedDB.open('sp_portal', 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('cache');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    const tx = async (modo, fn) => { const db = await abrir(); return new Promise((res, rej) => { const t = db.transaction('cache', modo); const st = t.objectStore('cache'); const q = fn(st); t.oncomplete = () => { res(q && q.result); db.close(); }; t.onerror = () => { rej(t.error); db.close(); }; }); };
+    return {
+      leer: async () => { try { return await tx('readonly', (st) => st.get('base')); } catch { return null; } },
+      guardar: async (v) => { try { await tx('readwrite', (st) => st.put(v, 'base')); } catch { /* sin espacio o modo privado: se trabaja sin copia */ } },
+      borrar: async () => { try { await tx('readwrite', (st) => st.delete('base')); } catch { /* nada */ } },
+    };
+  })();
+  S.borrarCopiaLocal = () => Cache.borrar();
+  const limpio = (p) => { const o = {}; for (const k in p) if (k[0] !== '_') o[k] = p[k]; return o; };
+  let guardarTimer = null;
+  function guardarCopia() {
+    if (!S.firma) return;
+    clearTimeout(guardarTimer);
+    guardarTimer = setTimeout(() => Cache.guardar({ ver: CACHE_VER, url: API.base(), firma: S.firma, cat: S.cat, guardado: Date.now(), rows: S.pedidos.map(limpio) }), 1500);
+  }
+  S.on((w) => { if (w === 'data' && S.cargado) guardarCopia(); });
+
+  /** "Firma" de la base: cuántas claves activas hay y cuándo fue el último cambio en pedidos y en el maestro */
+  S.firmaServidor = async function () {
+    const [n, ped, art] = await Promise.all([
+      API.count('sp_pedidos', [['activo', 'eq', 'true']]),
+      API.select('sp_pedidos', { select: 'actualizado_en', order: 'actualizado_en.desc', limit: 1 }),
+      API.select('sp_articulos', { select: 'actualizado_en', order: 'actualizado_en.desc', limit: 1 }).catch(() => []),
+    ]);
+    return { n, maxPed: ped[0] ? ped[0].actualizado_en : null, maxArt: art[0] ? art[0].actualizado_en : null };
+  };
+  function usarRenglones(rows) {
     rows.forEach(S.enrich);
     S.pedidos = rows;
     S.bajas = null;
     S.cargado = true;
-    S.emit('data');
+  }
+  /** Descarga completa (catálogos, firma y pedidos en paralelo) */
+  async function cargaCompleta(onProgress) {
+    const [, firma, rows] = await Promise.all([
+      S.loadCatalogos(),
+      S.firmaServidor().catch(() => null),
+      API.selectAll('sp_v_pedidos', { filters: [['activo', 'eq', 'true']], order: 'id' }, onProgress),
+    ]);
+    S.firma = firma;
+    usarRenglones(rows);
+  }
+  /** Pregunta a Supabase qué cambió y trae solo eso. Devuelve true si hubo cambios. */
+  S.sincronizar = async function () {
+    if (S._sync) return S._sync;
+    S._sync = (async () => {
+      S.sincronizando = true; S.emit('sync');
+      try {
+        const antesCat = JSON.stringify(S.cat);
+        const [firma] = await Promise.all([S.firmaServidor(), S.loadCatalogos()]);
+        const catCambio = JSON.stringify(S.cat) !== antesCat;
+        const f0 = S.firma || {};
+        let cambio = false;
+        if (!f0.maxPed || firma.maxArt !== f0.maxArt) {
+          // Cambió el maestro de artículos (existencias) o no hay referencia: se descarga todo
+          const rows = await API.selectAll('sp_v_pedidos', { filters: [['activo', 'eq', 'true']], order: 'id' });
+          usarRenglones(rows); cambio = true;
+        } else if (firma.maxPed !== f0.maxPed || firma.n !== f0.n) {
+          const nuevos = await API.selectAll('sp_v_pedidos', { filters: [['actualizado_en', 'gt', f0.maxPed]], order: 'id' });
+          const mapa = new Map(S.pedidos.map((p) => [p.id, p]));
+          for (const r of nuevos) { if (r.activo === false) mapa.delete(r.id); else { S.enrich(r); mapa.set(r.id, r); } }
+          if (mapa.size !== firma.n) {
+            const rows = await API.selectAll('sp_v_pedidos', { filters: [['activo', 'eq', 'true']], order: 'id' });
+            usarRenglones(rows);
+          } else { S.pedidos = [...mapa.values()].sort((a, b) => a.id - b.id); S.bajas = null; }
+          cambio = true;
+        }
+        S.firma = firma;
+        if (catCambio && !cambio) S.pedidos.forEach(S.enrich);
+        S.hoy = U.today();
+        S.actualizadoEn = Date.now(); S.desdeCopia = null;
+        if (cambio || catCambio) S.emit('data'); else guardarCopia();
+        return cambio || catCambio;
+      } finally { S.sincronizando = false; S._sync = null; S.emit('sync'); }
+    })();
+    return S._sync;
+  };
+  /**
+   * Carga inicial. Con copia local: se muestra al instante y se sincroniza en segundo plano
+   * (o se espera la sincronización si `esperar` es true, por ejemplo con el botón Actualizar).
+   */
+  S.loadAll = async function (onProgress, { esperar = false } = {}) {
+    S.hoy = U.today();
+    if (!S.cargado) {
+      const c = await Cache.leer();
+      if (c && c.ver === CACHE_VER && c.url === API.base() && Array.isArray(c.rows) && c.rows.length && c.firma) {
+        Object.assign(S.cat, c.cat || {}); S.refreshHol();
+        S.firma = c.firma; S.desdeCopia = c.guardado;
+        usarRenglones(c.rows);
+        S.emit('data');
+        const sync = S.sincronizar().catch((e) => { console.warn('No se pudo sincronizar', e); S.emit('sync'); });
+        if (esperar) await sync;
+        return;
+      }
+      await cargaCompleta(onProgress);
+      S.actualizadoEn = Date.now();
+      S.emit('data');
+      return;
+    }
+    await S.sincronizar();
   };
   S.loadBajas = async function () {
     const rows = await API.selectAll('sp_v_pedidos', { filters: [['activo', 'eq', 'false']], order: 'id' });
@@ -323,7 +426,7 @@
       const k = U.norm(c.categoria), prev = m.get(k);
       if (!prev || acentos(c.categoria) > acentos(prev.categoria)) m.set(k, c);
     }
-    return [...m.values()].sort((a, b) => a.categoria.localeCompare(b.categoria, 'es'));
+    return [...m.values()].sort((a, b) => U.cmpEs(a.categoria, b.categoria));
   };
   S.categorias = () => S.catsUnicas().map((c) => c.categoria);
   /** Categorías repetidas (misma categoría con y sin acentos): {quedan, sobran} */

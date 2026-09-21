@@ -167,13 +167,28 @@
   };
   APP.rerender = () => { const v = APP.views[APP.current]; if (v && v.refresh) v.refresh(); else APP.go(); };
 
+  /** Texto de "actualizado" (pie y botón) y aviso mientras se sincroniza en segundo plano */
+  function pintarEstadoDatos() {
+    const b = U.$('#btnRefresh'); if (!b) return;
+    const cuando = S.actualizadoEn ? new Date(S.actualizadoEn) : (S.desdeCopia ? new Date(S.desdeCopia) : null);
+    const txt = cuando ? `${S.actualizadoEn ? 'Actualizado' : 'Copia guardada de'} ${cuando.toLocaleString('es-MX')} · ${U.fmtNum(S.pedidos.length)} claves activas` : '';
+    const ll = U.$('#lastLoad'); if (ll) ll.textContent = txt;
+    b.title = `Volver a cargar datos · ${txt}`;
+    b.classList.toggle('sync', !!S.sincronizando);
+    b.innerHTML = S.sincronizando ? '<span class="giro">⟳</span> Sincronizando…' : '⟳ Actualizar';
+  }
+  S.on((w) => { if (w === 'sync' || w === 'data') pintarEstadoDatos(); });
+
+  /**
+   * v1.9.1: al abrir se muestra la copia guardada en el navegador y se buscan cambios en segundo plano.
+   * El botón Actualizar espera a traer los cambios.
+   */
   APP.reload = async function () {
-    const ld = UI.loading('Cargando pedidos…');
+    const boton = !!S.cargado;
+    const ld = UI.loading(boton ? 'Buscando cambios…' : 'Cargando pedidos…');
     try {
-      await S.loadAll((n) => ld.text(`Cargando pedidos… ${U.fmtNum(n)}`));
-      U.$('#lastLoad').textContent = `Actualizado ${new Date().toLocaleString('es-MX')} · ${U.fmtNum(S.pedidos.length)} claves activas`;
-      // En las pantallas de tabla el pie de página se oculta: la hora de carga queda en el botón
-      U.$('#btnRefresh').title = `Volver a cargar datos · ${U.$('#lastLoad').textContent}`;
+      await S.loadAll((n, t) => ld.text(`Cargando pedidos… ${U.fmtNum(n)}${t ? ` de ${U.fmtNum(t)}` : ''}`), { esperar: boton });
+      pintarEstadoDatos();
       APP.rerender();
     } catch (e) {
       console.error(e);

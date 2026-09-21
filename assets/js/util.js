@@ -58,10 +58,20 @@
     return d;
   };
   /** Igual que NETWORKDAYS: días hábiles entre a y b, incluyendo ambos extremos */
+  // v1.9.1: los resultados se recuerdan (muchas claves comparten fechas) y las semanas completas se cuentan de golpe
+  const memoND = new WeakMap(), sinHol = new Map();
   U.networkdays = function (a, b, hol) {
     if (a > b) return -U.networkdays(b, a, hol);
-    let c = 0, d = a, guard = 0;
-    while (d <= b && guard++ < 5000) { if (U.isBusiness(d, hol)) c++; d = U.addDays(d, 1); }
+    let memo = hol ? memoND.get(hol) : sinHol;
+    if (!memo) { memo = new Map(); memoND.set(hol, memo); }
+    const key = a + b;
+    const m = memo.get(key); if (m !== undefined) return m;
+    const total = Math.round((toUTC(b) - toUTC(a)) / 86400000) + 1;
+    const semanas = Math.floor(total / 7);
+    let c = semanas * 5, d = U.addDays(a, semanas * 7);
+    while (d <= b) { const w = U.weekday(d); if (w !== 0 && w !== 6) c++; d = U.addDays(d, 1); }
+    if (hol && hol.size) for (const h of hol) { if (h >= a && h <= b) { const w = U.weekday(h); if (w !== 0 && w !== 6) c--; } }
+    memo.set(key, c);
     return c;
   };
   U.daysInMonth = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate(); // m = 1..12
@@ -78,7 +88,12 @@
   U.norm = (s) => String(s === null || s === undefined ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
   U.blank = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
   U.uniq = (arr) => [...new Set(arr.filter((x) => !U.blank(x)))];
-  U.sortEs = (arr) => arr.slice().sort((a, b) => String(a).localeCompare(String(b), 'es'));
+  // v1.9.1: un solo comparador reutilizable (localeCompare con opciones crea uno nuevo en cada comparación y es ~10 veces más lento)
+  U.COL = typeof Intl !== 'undefined' ? new Intl.Collator('es') : null;
+  U.COL_NUM = typeof Intl !== 'undefined' ? new Intl.Collator('es', { numeric: true }) : null;
+  U.cmpEs = (a, b) => (U.COL ? U.COL.compare(String(a), String(b)) : String(a).localeCompare(String(b)));
+  U.cmpNum = (a, b) => (U.COL_NUM ? U.COL_NUM.compare(String(a), String(b)) : String(a).localeCompare(String(b), 'es', { numeric: true }));
+  U.sortEs = (arr) => arr.slice().sort(U.cmpEs);
   U.groupBy = (arr, fn) => { const m = new Map(); for (const x of arr) { const k = fn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); } return m; };
   U.sum = (arr, fn) => arr.reduce((a, x) => a + (Number(fn ? fn(x) : x) || 0), 0);
   U.chunk = (arr, n) => { const out = []; for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n)); return out; };

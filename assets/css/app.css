@@ -422,3 +422,8 @@ body.tabla-max #view.vista-fija > .card:not(.card-tabla) { display: none; }
 .grid select.cat-sel.cat-falta { border-color: #e7b43a; background: #fff8e6; color: #7a5200; font-weight: 700; }
 .trunc-in { display: inline-block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
 .pf-cat-info { margin-top: 4px; }
+
+/* v1.9.1 · Sincronización en segundo plano */
+#btnRefresh.sync { opacity: .85; }
+#btnRefresh .giro { display: inline-block; animation: giro 1s linear infinite; }
+@keyframes giro { to { transform: rotate(360deg); } }

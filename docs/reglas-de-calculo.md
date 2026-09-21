@@ -95,6 +95,12 @@ Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (
 
 **TIEMPO DE ASIGNACION** ya no se compara contra el Excel: desde la v1.7.0 son horas hábiles. En los 222 tickets medidos el promedio baja de **3.6 h corridas a 0.8 h hábiles**, ninguno sube, y 220 de 222 (99.1%) quedan dentro de la meta de 8.5 h.
 
+## Velocidad (v1.9.1)
+- **Copia local**: la base se guarda en el navegador (IndexedDB). Al abrir el portal se muestra al instante y en segundo plano se revisa en Supabase qué cambió (cuántas claves activas hay y la hora del último cambio en pedidos y en el maestro de artículos). Solo se descargan los renglones modificados desde la última vez; si cambió el maestro (existencias) o algo no cuadra, se descarga todo. Mientras revisa, el botón dice **⟳ Sincronizando…**; **⟳ Actualizar** espera a traer los cambios.
+- La primera descarga (o una descarga completa) pide las páginas de 1,000 renglones **en paralelo** (4 a la vez) y junto con los catálogos.
+- Las tablas pintan primero 40 renglones y agregan el resto después del primer cuadro; el scroll se atiende una vez por cuadro. Ordenar usa un comparador reutilizable y los días hábiles se calculan con semanas completas y memoria de resultados.
+- Si una versión futura agrega columnas a la base, hay que subir `CACHE_VER` en `store.js` para que todos descarguen la base completa una vez.
+
 ## Categoría del ticket y campos del ticket (v1.9.0)
 - **Nuevo ticket** pide la **categoría** (obligatoria) y muestra al momento el tiempo de cotización (días × 8.5 h hábiles) y la fecha y hora límite. Ya no muestra Parámetros logísticos, Proveedor ni Tiempo de descarga: al levantar un ticket todavía no hay proveedor.
 - En el tablero de tickets la **categoría se elige en la misma tabla** (con la contraseña) y se guarda en todas las claves del ticket; el pie muestra cuántos tickets siguen **sin categoría** (clic para filtrarlos).

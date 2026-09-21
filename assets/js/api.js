@@ -109,17 +109,47 @@
   API.select = async (table, query) => (await request('GET', table, { query })).data;
   API.count = async (table, filters, col = 'id') => (await request('GET', table, { query: { select: col, filters, limit: 1 }, prefer: 'count=exact' })).count;
   /** Trae todas las filas paginando de 1000 en 1000 */
+  /**
+   * Trae todos los renglones de una tabla. v1.9.1: la primera página trae el total y las demás
+   * se piden EN PARALELO (4 a la vez) en lugar de una tras otra: la carga tarda una fracción.
+   */
   API.selectAll = async function (table, query = {}, onProgress) {
-    const page = 1000; let offset = 0; const out = [];
-    for (;;) {
-      const rows = await API.select(table, { ...query, limit: page, offset });
-      out.push(...rows);
-      if (onProgress) onProgress(out.length);
-      if (rows.length < page) break;
-      offset += page;
+    const page = 1000;
+    const first = await request('GET', table, { query: { ...query, limit: page }, prefer: 'count=exact' });
+    const out = (first.data || []).slice();
+    if (onProgress) onProgress(out.length, first.count);
+    if (out.length < page) return out;
+    const total = first.count;
+    if (total === null || total === undefined) { // sin total: una página tras otra, como antes
+      let offset = page;
+      for (;;) {
+        const rows = await API.select(table, { ...query, limit: page, offset });
+        out.push(...rows); if (onProgress) onProgress(out.length);
+        if (rows.length < page) break;
+        offset += page;
+      }
+      return out;
+    }
+    const offsets = []; for (let o = page; o < total; o += page) offsets.push(o);
+    const partes = new Array(offsets.length);
+    let sig = 0, llevamos = out.length;
+    const trabajador = async () => {
+      while (sig < offsets.length) {
+        const k = sig++;
+        partes[k] = await API.select(table, { ...query, limit: page, offset: offsets[k] });
+        llevamos += partes[k].length; if (onProgress) onProgress(llevamos, total);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, offsets.length) }, trabajador));
+    partes.forEach((r) => out.push(...r));
+    // Si mientras tanto se agregaron renglones, se pide lo que falte
+    if (partes.length && partes[partes.length - 1].length === page) {
+      let offset = offsets[offsets.length - 1] + page;
+      for (;;) { const rows = await API.select(table, { ...query, limit: page, offset }); out.push(...rows); if (rows.length < page) break; offset += page; }
     }
     return out;
   };
+  API.base = () => BASE;
   API.insert = async function (table, rows, { chunk = 500, returning = true, onProgress } = {}) {
     const list = Array.isArray(rows) ? rows : [rows];
     const out = [];

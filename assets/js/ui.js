@@ -81,7 +81,7 @@
    * no hay botón "Siguiente"; al bajar con el scroll se agregan más renglones y el
    * encabezado se queda fijo. cols: [{k, label, render(row), sort(row), cls, width}]
    */
-  UI.table = function (container, { cols, rows, bloque = 150, pageSize, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '', pieExtra = null, ampliar = false }) {
+  UI.table = function (container, { cols, rows, bloque = 100, inicial = 40, pageSize, onRow, selectable, rowKey = (r) => r.id, sortKey, sortDir = 1, emptyMsg = 'Sin registros con estos filtros.', alto = false, cls = '', pieExtra = null, ampliar = false }) {
     if (pageSize) bloque = pageSize; // compatibilidad con llamadas antiguas
     const st = { sortKey, sortDir, selected: new Set(), shown: 0 };
     const nCols = cols.length + (selectable ? 1 : 0);
@@ -89,13 +89,16 @@
 
     function sorted() {
       if (!st.sortKey) return rows.slice();
-      const c = cols.find((x) => x.k === st.sortKey); const get = c && c.sort ? c.sort : (r) => r[st.sortKey];
+      const c = cols.find((x) => x.k === st.sortKey); const getRaw = c && c.sort ? c.sort : (r) => r[st.sortKey];
+      // La llave de orden se calcula una vez por renglón (no en cada comparación)
+      const llaves = new Map(rows.map((r) => [r, getRaw(r)]));
+      const get = (r) => llaves.get(r);
       return rows.slice().sort((a, b) => {
         let va = get(a), vb = get(b);
         const ea = va === null || va === undefined || va === '', eb = vb === null || vb === undefined || vb === '';
         if (ea && eb) return 0; if (ea) return 1; if (eb) return -1;
         if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * st.sortDir;
-        return String(va).localeCompare(String(vb), 'es', { numeric: true }) * st.sortDir;
+        return U.cmpNum(va, vb) * st.sortDir;
       });
     }
 
@@ -125,13 +128,13 @@
     /** ¿El final de la tabla está cerca de la vista? (sirve con scroll propio o de la página) */
     function cerca() {
       if (!tbody || !document.body.contains(tbody)) return false;
-      if (alto && wrap.scrollHeight > wrap.clientHeight + 4) return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 600;
+      if (alto && wrap.scrollHeight > wrap.clientHeight + 4) return wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 500;
       const r = wrap.getBoundingClientRect();
-      return r.bottom - window.innerHeight < 600;
+      return r.bottom - window.innerHeight < 500;
     }
-    function agregar() {
+    function agregar(n = bloque) {
       if (st.shown >= data.length) return false;
-      const next = data.slice(st.shown, st.shown + bloque);
+      const next = data.slice(st.shown, st.shown + n);
       tbody.insertAdjacentHTML('beforeend', next.map(fila).join(''));
       st.shown += next.length;
       return true;
@@ -141,9 +144,13 @@
       while (st.shown < data.length && cerca() && g++ < 200) agregar();
       pintarPie();
     }
+    // v1.9.1: el scroll se atiende una vez por cuadro de animación (no en cada evento)
+    let pendiente = false;
     function alScroll() {
       if (!tbody || !document.body.contains(tbody)) { window.removeEventListener('scroll', alScroll); return; }
-      rellenar();
+      if (pendiente) return;
+      pendiente = true;
+      requestAnimationFrame(() => { pendiente = false; rellenar(); });
     }
 
     const sincronizarTodos = () => {
@@ -165,7 +172,8 @@
 
       if (!data.length) { tbody.innerHTML = `<tr><td colspan="${nCols}">${UI.empty(emptyMsg)}</td></tr>`; pintarPie(); return; }
 
-      agregar(); rellenar();
+      // v1.9.1: primero se pintan pocos renglones (los que caben en pantalla) y el resto se agrega después del primer cuadro
+      agregar(inicial); pintarPie(); requestAnimationFrame(rellenar);
       wrap.addEventListener('scroll', alScroll, { passive: true });
       window.addEventListener('scroll', alScroll, { passive: true }); // por si la pantalla es angosta y se desplaza la página
 
