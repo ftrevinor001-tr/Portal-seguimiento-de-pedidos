@@ -44,27 +44,39 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 - **Registros anteriores**: el comprador guardado en cada pedido **no cambia** al actualizar el maestro de artículos (esa carga solo modifica `sp_articulos`). Si alguien cambió de cartera o dejó la empresa, los pedidos históricos conservan a quien los compró. Solo cambia si alguien lo edita a mano en el detalle o en "Editar seleccionados".
 - **Origen del dato del maestro**: *Datos y bitácora → Actualizar maestro de artículos* con un archivo que tenga CLAVE (o IDARTICULO) y COMPRADOR, como la hoja EXISTENCIAS. Claves repetidas con compradores distintos se guardan como "A | B"; los valores 0 se consideran sin comprador.
 
-## Etapas del TICKET (v1.3.0 — réplica del REPORTE DE TICKETS)
+## Horario laboral del reloj de tickets (v1.7.0)
+
+Todas las etapas 1 a 5 del ticket se miden en **horas hábiles**, no en días ni en horas corridas:
+
+- **Jornada**: 8:00 a 13:30 y 15:00 a 18:00 = **8.5 horas**, de **lunes a viernes**, sin los **días inhábiles** del catálogo.
+- Lo que cae fuera de ese horario **no cuenta**: un ticket levantado el **viernes a las 17:00** consume 1 hora ese día y sigue contando el **lunes a las 8:00** (1 día laboral se cumple el lunes a las 17:00).
+- Si el ticket se levanta fuera de horario (7:00, 19:00, sábado o festivo), el reloj arranca en el **siguiente instante hábil**.
+- Los **días de cotización** de cada categoría se convierten a horas: 1 día = 8.5 h, 3 días = 25.5 h, 5 días = 42.5 h.
+- Se cambia en `config.js` con `HORARIO: { jornada: [['08:00','13:30'], ['15:00','18:00']] }`.
+- Funciones: `C.horasHabiles(desde, hasta, inhábiles)`, `C.sumaHorasHabiles(desde, horas, inhábiles)`, `C.inicioHabil(fecha)`, `C.horasDia()`, `C.diasAHoras(d)`. Pruebas: `node tests/horario.test.js` (42 verificaciones).
+
+## Etapas del TICKET (v1.3.0, medición en horas hábiles desde v1.7.0)
 
 | # | Etapa | Del … al … | Responsable | Meta |
 |---|---|---|---|---|
-| 1 | Asignación | Fecha y hora de solicitud → **fecha y hora de asignación** | Jefe de área | 24 horas |
-| 2 | Cotización | Asignación → **entrega de la cotización al usuario**, contra la **fecha límite** | Comprador | días de la categoría |
-| 3 | Recotización | Vencimiento de la cotización → **entrega de la re-cotización** | Comprador | 2 días hábiles |
-| 4 | Autorización | Cotización entregada → **autorización de compra** | Usuario | 3 días hábiles |
-| 5 | Pago | Autorización → **pago al proveedor** | Administración | 2 días hábiles |
+| 1 | Asignación | Fecha y hora de solicitud → **fecha y hora de asignación** | Jefe de área | 8.5 h hábiles (1 día laboral) |
+| 2 | Cotización | Asignación → **entrega de la cotización al usuario**, contra la **fecha y hora límite** | Comprador | días de la categoría × 8.5 h |
+| 3 | Recotización | Vencimiento de la cotización → **entrega de la re-cotización** | Comprador | 17 h hábiles (2 días) |
+| 4 | Autorización | Cotización entregada → **autorización de compra** | Usuario | 25.5 h hábiles (3 días) |
+| 5 | Pago | Autorización → **pago al proveedor** | Administración | 17 h hábiles (2 días) |
 | 6 | Llegada | Pago → **fecha real de llegada** (contra la fecha estimada) | Proveedor | 15 días hábiles |
 
-- **Tiempo de asignación**: diferencia exacta entre solicitud y asignación, en horas y minutos (`(fecha+hora asignación) − (fecha+hora solicitud)`), como la fórmula del reporte. Acumula más de 24 horas.
-- **Fecha límite de cotización** = fecha de solicitud + los **días hábiles de la categoría** (Catálogos → *Categorías de tickets*, cargadas de la hoja T.E. COTIZACIONES). Se puede escribir a mano; si se elige otra categoría se recalcula.
-- **ALERTA COTIZACIÓN** (igual que el Excel): cancelado → `CANCELADO`; sin fecha límite → `SIN FECHA LIMITE`; con entrega: después del límite → `FUERA DEL PLAZO`, si no `FINALIZADO`; sin entrega: hoy > límite → `FUERA DEL PLAZO`, hoy = límite → `VENCE HOY`, falta 1 día → `POR VENCER`, si no `EN TIEMPO`.
+- **Tiempo de asignación**: horas **hábiles** entre la solicitud y la asignación (v1.7.0; antes eran horas corridas como en el Excel). Las fechas capturadas sin hora empiezan a contar a las 8:00.
+- **Fecha y hora límite de cotización** = solicitud + (días de la categoría × 8.5) horas hábiles. La categoría sale de Catálogos → *Categorías de tickets*. El campo "Fecha límite de cotización (manual, opcional)" solo se usa para **forzarla**: si está vacío el portal la calcula sola, y si tiene fecha se entiende como el cierre de ese día (18:00). Los tickets del reporte histórico traen esa fecha capturada, así que conservan su límite original.
+- **Horas restantes**: la tabla y el detalle muestran las horas hábiles que faltan para el límite (en rojo si ya venció).
+- **ALERTA COTIZACIÓN**: cancelado → `CANCELADO`; sin fecha límite → `SIN FECHA LIMITE`; con entrega: después del límite → `FUERA DEL PLAZO`, si no `FINALIZADO` (si la entrega se capturó sin hora solo se comparan las fechas); sin entrega: ya pasó la hora límite → `FUERA DEL PLAZO`, el límite es hoy → `VENCE HOY`, quedan 8.5 h hábiles o menos → `POR VENCER`, si no `EN TIEMPO`.
 - **ALERTA COMPRA** (igual que el Excel): cancelado → `CANCELADO`; sin autorización → `SIN AUTORIZACION DE COMPRA`; sin fecha estimada → `SIN FECHA ESTIMADA`; con llegada real: después de la estimada → `FUERA DEL PLAZO`, si no `FINALIZADO`; sin llegada: mismo criterio contra la fecha estimada.
 - **Días fuera de plazo** = (llegada real o hoy) − fecha estimada, en días naturales, nunca negativo.
-- **Validación de tiempo**: `PENDIENTE DE ASIGNACION` si falta la asignación, `REVISAR FECHA/HORA` si la asignación es anterior a la solicitud, si no `OK`.
+- **Validación de tiempo**: `PENDIENTE DE ASIGNACION` si falta la asignación, `REVISAR FECHA/HORA` si la asignación es anterior a la solicitud (se revisa con el reloj de pared, no con el horario), si no `OK`.
 - **Recotización**: sigue inactiva hasta que la cotización entregada **vence sin autorización de compra**. El vencimiento solo existe si se captura la vigencia (días) o la fecha de vencimiento; los tickets históricos, que no la traen, no se marcan solos.
 - **Etapa actual**: POR ASIGNAR → EN COTIZACIÓN → ESPERA DEL USUARIO → (POR RECOTIZAR) → POR PAGAR → EN SURTIMIENTO → ENTREGADO; cancelado aparte.
 - **Captura por ticket**: las fechas de etapas son del folio completo; se capturan en el detalle de cualquier renglón y se guardan en todos los del ticket.
-- **Metas**: `config.js` → `METAS_TICKET: { asignacion_horas: 24, cotizacion: 3, recotizacion: 2, autorizacion: 3, pago: 2, entrega: 15, vigencia: 15, avisar_vence: 3 }`.
+- **Metas**: `config.js` → `METAS_TICKET: { asignacion_horas: 8.5, recotizacion_horas: 17, autorizacion_horas: 25.5, pago_horas: 17, cotizacion: 3, entrega: 15, vigencia: 15, avisar_vence: 3 }` (las que terminan en `_horas` son horas hábiles; `entrega` y `vigencia`, días).
 
 ### Carga del reporte
 *Datos y bitácora → Tickets · reporte*: se sube el archivo con la hoja **BASE DE DATOS**. El portal da de baja los tickets que ya tiene (quedan en "Ver dados de baja" y en la bitácora), carga los del archivo y, si viene la hoja de categorías, actualiza los días de cotización. Al cargar se corrige el AÑO con la fecha de solicitud, se aceptan fechas escritas a mano tipo "22 DE AGOSTO 26" y se unifican los nombres escritos distinto: comprador JULISSA YAJAIRA → JULISSA YAHAIRA MEZA; solicitantes RH → RECURSOS HUMANOS, CALIDAD → CONTROL DE CALIDAD y ADMINISTRATIVO → ADMINISTRACION. VICTORIA MIRANDA y MARIA VICTORIA son personas distintas y se dejan separadas.
@@ -74,13 +86,14 @@ El comprador **no está amarrado a la clave**. En *Datos generales → Asignaci�
 
 | Columna del reporte | Coincidencia |
 |---|---|
-| TIEMPO DE ASIGNACION | 222/222 = 100% |
 | VALIDACION TIEMPO | 88/88 = 100% |
 | DÍAS FUERA DE PLAZO | 57/57 = 100% |
 | ALERTA COTIZACION | 234/235 = 99.6% |
 | ALERTA COMPRA | 222/226 = 98.2% |
 
 Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (sin fórmula) y quedó con valores viejos: "TERMINADO" y "DENTRO DEL PLAZO", que ya no existen en la fórmula actual.
+
+**TIEMPO DE ASIGNACION** ya no se compara contra el Excel: desde la v1.7.0 son horas hábiles. En los 222 tickets medidos el promedio baja de **3.6 h corridas a 0.8 h hábiles**, ninguno sube, y 220 de 222 (99.1%) quedan dentro de la meta de 8.5 h.
 
 ## Pantallas (v1.6.0)
 - Hay una pestaña por módulo: **Sobrepedido** (sobrepedido, pedido especial y sucursal entrega directa) y **Entregas directas**. Los tickets siguen en su propia pestaña. La dirección anterior `#/seguimiento` lleva a Sobrepedido.
