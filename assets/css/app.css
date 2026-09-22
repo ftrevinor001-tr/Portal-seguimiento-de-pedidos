@@ -427,3 +427,7 @@ body.tabla-max #view.vista-fija > .card:not(.card-tabla) { display: none; }
 #btnRefresh.sync { opacity: .85; }
 #btnRefresh .giro { display: inline-block; animation: giro 1s linear infinite; }
 @keyframes giro { to { transform: rotate(360deg); } }
+
+/* v1.9.2 · Reporte: separadores entre grupos de columnas */
+.grid.rep th.col-sep, .grid.rep td.col-sep { border-left: 2px solid var(--line); }
+.grid.rep td.col-fuerte { font-weight: 700; }

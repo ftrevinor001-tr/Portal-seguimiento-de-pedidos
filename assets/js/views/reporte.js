@@ -15,11 +15,11 @@
   /** Tabla definida una vez: sirve para HTML y para Excel */
   function tablaHTML(t, { bars } = {}) {
     return `<div class="table-wrap"><table class="grid compact rep">
-      <thead><tr>${t.columns.map((c) => `<th class="${c.type && c.type !== 'text' ? 'num' : ''}">${U.esc(c.header)}</th>`).join('')}${bars ? '<th style="min-width:160px">Composición</th>' : ''}</tr></thead>
+      <thead><tr>${t.columns.map((c) => `<th class="${c.type && c.type !== 'text' ? 'num' : ''}${c.sep ? ' col-sep' : ''}">${U.esc(c.header)}</th>`).join('')}${bars ? '<th style="min-width:160px">Composición</th>' : ''}</tr></thead>
       <tbody>${t.rows.map((r) => `<tr class="${r._total ? 'row-total' : ''}">${t.columns.map((c) => {
         const v = r[c.key];
         const txt = c.type === 'pct' ? U.fmtPct(v) : c.type === 'money' ? U.fmtMoney(v) : c.type === 'number' ? U.fmtNumAuto(v) : U.esc(v ?? '');
-        return `<td class="${c.type && c.type !== 'text' ? 'num' : ''}">${txt}</td>`;
+        return `<td class="${c.type && c.type !== 'text' ? 'num' : ''}${c.sep ? ' col-sep' : ''}${c.fuerte ? ' col-fuerte' : ''}">${txt}</td>`;
       }).join('')}${bars ? `<td>${bars(r)}</td>` : ''}</tr>`).join('') || `<tr><td colspan="${t.columns.length + (bars ? 1 : 0)}">${UI.empty('Sin datos')}</td></tr>`}</tbody></table></div>`;
   }
   const COLS_CUMP = [
@@ -59,12 +59,18 @@
     const tMarca = porDimension(rowsMes, 'marca', 'Marca', 15);
     tablas.push(tComp, tArea, tSol, tMarca);
 
-    // C) Clasificación de política (sobrepedido)
+    // C) Clasificación de política: todo el módulo sobrepedido, separado por tipo de solicitud (v1.9.2)
     const spAnio = delAnio.filter((p) => p.modulo === 'SOBREPEDIDO');
     const CATS = [...C.CLASIF_POLITICA, 'SIN CLASIFICAR'];
+    const TIPOS = [{ k: 'T_SOBREPEDIDO', label: 'Sobrepedido' }, { k: 'T_PEDIDO ESPECIAL', label: 'Pedido especial' }, { k: 'T_SUCURSAL ENTREGA DIRECTA', label: 'Suc. entrega directa' }];
+    const tipoDe = (p) => { const t = U.norm(p.tipo_solicitud); return t === 'ESPECIAL' ? 'PEDIDO ESPECIAL' : (['SOBREPEDIDO', 'PEDIDO ESPECIAL', 'SUCURSAL ENTREGA DIRECTA'].includes(t) ? t : 'OTRO'); };
+    const hayOtro = spAnio.some((p) => tipoDe(p) === 'OTRO');
+    if (hayOtro) TIPOS.push({ k: 'T_OTRO', label: 'Otro tipo' });
     const filasPol = U.MESES.map((nom, i) => {
       const rs = spAnio.filter((p) => mesDe(p).mes === i + 1 && !C.cancelado(p));
       const o = { mesNombre: nom };
+      TIPOS.forEach((t) => { o[t.k] = rs.filter((p) => `T_${tipoDe(p)}` === t.k).length; });
+      o.totalClaves = rs.length;
       CATS.forEach((c) => { o[c] = rs.filter((p) => (p.validacion_clasificacion || 'SIN CLASIFICAR') === c).length; });
       o.monto = U.sum(rs.filter((p) => p.validacion_clasificacion === 'SOBREPEDIDO - VENTA REAL'), (p) => p._costo_total);
       o.cumple = rs.filter((p) => p._cumple_politica === 'CUMPLE').length;
@@ -75,7 +81,7 @@
     const totPol = { mesNombre: 'TOTAL', _total: true };
     Object.keys(filasPol[0]).filter((k) => k !== 'mesNombre').forEach((k) => { totPol[k] = k === 'pctCumple' ? null : U.sum(filasPol, (r) => r[k]); });
     totPol.pctCumple = (totPol.cumple + totPol.pendiente) ? totPol.cumple / (totPol.cumple + totPol.pendiente) : null;
-    const tPol = { name: 'Clasificación de política', columns: [{ header: 'Mes', key: 'mesNombre' }, ...CATS.map((c) => ({ header: c.replace('SOBREPEDIDO - ', 'SP · ').replace('PEDIDO ESPECIAL - ', 'P.ESP · '), key: c, type: 'number' })), { header: 'Monto venta real (MXN)', key: 'monto', type: 'money' }, { header: 'Cumple política', key: 'cumple', type: 'number' }, { header: 'Pendiente política', key: 'pendiente', type: 'number' }, { header: '% cumple', key: 'pctCumple', type: 'pct' }], rows: [...filasPol, totPol] };
+    const tPol = { name: 'Clasificación de política', columns: [{ header: 'Mes', key: 'mesNombre' }, ...TIPOS.map((t) => ({ header: t.label, key: t.k, type: 'number' })), { header: 'Total claves', key: 'totalClaves', type: 'number', fuerte: true }, ...CATS.map((c, i) => ({ header: c.replace('SOBREPEDIDO - ', 'SP · ').replace('PEDIDO ESPECIAL - ', 'P.ESP · '), key: c, type: 'number', sep: i === 0 })), { header: 'Monto venta real (MXN)', key: 'monto', type: 'money' }, { header: 'Cumple política', key: 'cumple', type: 'number' }, { header: 'Pendiente política', key: 'pendiente', type: 'number' }, { header: '% cumple', key: 'pctCumple', type: 'pct' }], rows: [...filasPol, totPol] };
     tablas.push(tPol);
 
     // D) Facturación y existencias
@@ -113,7 +119,7 @@
       <section class="card"><div class="card-head"><h3>2. Detalle · ${U.esc(etiquetaMes)}</h3></div>
         <div class="rep-grid"><div><h4>Por comprador</h4>${tablaHTML(tComp, { bars: barsCump })}</div><div><h4>Por área</h4>${tablaHTML(tArea, { bars: barsCump })}</div>
         <div><h4>Por solicitante (top 20)</h4>${tablaHTML(tSol, { bars: barsCump })}</div><div><h4>Por marca (top 15)</h4>${tablaHTML(tMarca, { bars: barsCump })}</div></div></section>
-      <section class="card"><div class="card-head"><h3>3. Clasificación de política · Sobrepedido ${y}</h3><p class="muted">Según “Clasificación de política” capturada en cada clave (sin canceladas). Monto = costo total de SOBREPEDIDO - VENTA REAL.</p></div>${tablaHTML(tPol)}</section>
+      <section class="card"><div class="card-head"><h3>3. Sobrepedido, pedido especial y sucursal entrega directa · ${y}</h3><p class="muted">Claves del año por tipo de solicitud y por la “Clasificación de política” capturada en cada clave (sin canceladas). Monto = costo total de SOBREPEDIDO - VENTA REAL.</p></div>${tablaHTML(tPol)}</section>
       <section class="card"><div class="card-head"><h3>4. Facturación y existencias · ${y}</h3><p class="muted">Estatus de facturación calculado; INV con la existencia vigente del maestro de artículos.</p></div>${tablaHTML(tFac)}</section>`;
   }
 
