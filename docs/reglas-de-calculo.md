@@ -96,7 +96,7 @@ Las 5 diferencias son renglones donde la alerta del Excel está escrita a mano (
 **TIEMPO DE ASIGNACION** ya no se compara contra el Excel: desde la v1.7.0 son horas hábiles. En los 222 tickets medidos el promedio baja de **3.6 h corridas a 0.8 h hábiles**, ninguno sube, y 220 de 222 (99.1%) quedan dentro de la meta de 8.5 h.
 
 ## Reporte mensual · tabla 3 (v1.9.2)
-- La tabla "Sobrepedido, pedido especial y sucursal entrega directa" cuenta todas las claves del módulo sobrepedido del año (sin canceladas) y las separa por **tipo de solicitud**: Sobrepedido, Pedido especial (incluye "ESPECIAL") y Sucursal entrega directa, con su total. Después siguen las columnas de la **clasificación de política** capturada en cada clave, el monto de venta real y el cumplimiento de la política.
+- La tabla "Sobrepedido, pedido especial y sucursal entrega directa" cuenta todas las claves del módulo sobrepedido del año (sin canceladas) en **Total claves**; después siguen las columnas de la **clasificación de política** capturada en cada clave, el monto de venta real y el cumplimiento de la política. (v1.9.3: se quitó el desglose por tipo de solicitud, a petición del área.)
 
 ## Velocidad (v1.9.1)
 - **Copia local**: la base se guarda en el navegador (IndexedDB). Al abrir el portal se muestra al instante y en segundo plano se revisa en Supabase qué cambió (cuántas claves activas hay y la hora del último cambio en pedidos y en el maestro de artículos). Solo se descargan los renglones modificados desde la última vez; si cambió el maestro (existencias) o algo no cuadra, se descarga todo. Mientras revisa, el botón dice **⟳ Sincronizando…**; **⟳ Actualizar** espera a traer los cambios.
